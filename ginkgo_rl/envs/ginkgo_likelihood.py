@@ -74,7 +74,7 @@ class GinkgoLikelihoodEnv(Env):
         if legal:
             reward = self._compute_log_likelihood(action)
             self._merge(action)
-            done = self._check_if_done
+            done = self._check_if_done()
             info = {"legal": True}
             self.illegal_action_counter = 0
         else:
@@ -128,7 +128,7 @@ class GinkgoLikelihoodEnv(Env):
         i, j = action
         assert self._check_legality(action)
         parent = self.state[i, :] + self.state[j, :]
-        log_likelihood = ginkgo_log_likelihood(self.state[i], )
+        log_likelihood = ginkgo_log_likelihood(self.state[i])  # TODO
 
     def _merge(self, action):
         """ Perform action, updating self.n and self.state """
@@ -137,3 +137,6 @@ class GinkgoLikelihoodEnv(Env):
         self.state[i, :] = self.state[i, :] + self.state[j, :]
         self.state[j, :] = np.zeros(4)
         self.n -= 1
+
+    def _check_if_done(self):
+        return self.n <= 1
