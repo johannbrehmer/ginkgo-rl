@@ -1,6 +1,6 @@
 import numpy as np
 from gym import Env
-from gym.spaces import Discrete, Box
+from gym.spaces import Discrete, Box, Tuple
 import logging
 from showerSim.invMass_ginkgo import Simulator as GinkgoSim
 from showerSim.likelihood_invM import split_logLH as ginkgo_log_likelihood
@@ -29,16 +29,36 @@ class GinkgoLikelihoodEnv(Env):
     Rewards are the log likelihood of a 2 -> 1 merger under the true Ginkgo model. For illegal actions, the reward is instead given by illegal_reward.
     """
 
-    def __init__(self, n_max=20, n_min=10, illegal_reward=-1000.):
+    def __init__(
+        self,
+        illegal_reward=-1000.,
+        n_max=20,
+        n_min=10,
+        max_n_try=1000,
+        w_rate=3.,
+        qcd_rate=1.5,
+        pt_min=0.3**2,
+        jet_mass=80.,
+        jet_momentum=400.,
+        jetdir=(1, 1, 1),
+    ):
         super().__init__()
 
         # Checks
-        assert 0 < self.n_min < self.n_max
+        assert 1 < self.n_min < self.n_max
 
         # Hyperparameters
+        self.illegal_reward = illegal_reward
         self.n_max = n_max
         self.n_min = n_min
-        self.illegal_reward = illegal_reward
+        self.max_n_try = max_n_try
+        self.w_rate = w_rate
+        self.qcd_rate = qcd_rate
+        self.pt_min = pt_min
+        self.jet_mass = jet_mass
+        jetdir = np.array(jetdir)
+        jetvec = jet_momentum * jetdir / np.linalg.norm(jetdir)
+        self.jet_momentum = np.concatenate(([np.sqrt(jet_momentum ** 2 + self.jet_mass ** 2)], jetvec))
 
         # Current state
         self.jet = None
@@ -50,13 +70,19 @@ class GinkgoLikelihoodEnv(Env):
         self.sim = self._init_sim()
         self._simulate()
 
+        # Spaces
+        self.action_space = Tuple((Discrete(self.n_max), Discrete(self.n_max)))
+        self.observation_space = Box(low=None, high=None, shape=(self.n_max, 3), dtype=np.float)
+
     def reset(self):
         """ Resets the state of the environment and returns an initial observation. """
+
         self._simulate()
         return self.state
 
     def reset_to(self, n, state, epsilon=1.e-9):
         """ Resets the state of the environment to a given state """
+
         self.jet = None  # Hopefully won't need this
         self.state = state
         self.illegal_action_counter = 0
@@ -90,29 +116,28 @@ class GinkgoLikelihoodEnv(Env):
 
     def render(self, mode="human"):
         """ Visualize / report what's happening """
-        pass
 
-    def _init_sim(self, rate2=8., pt_min=0.3**2, jetdir=(1, 1, 1), M2start=80.**2, jetP=400., max_n_try=1000):
-        pt_min = torch.tensor(pt_min)
-        jetM = M2start**0.5
-        jetdir = np.array(jetdir)
-        jetvec = jetP * jetdir / np.linalg.norm(jetdir)
-        jet4vec = np.concatenate(([np.sqrt(jetP ** 2 + jetM ** 2)], jetvec))
+        logger.info(f"{n} particles:")
+        for i, p in self.state[:self.n]:
+            logger.info(f"  p[{i}]")
 
-        return  GinkgoSim(
-            jet_p=jet4vec,
-            pt_cut=float(pt_min),
-            Delta_0=torch.tensor(M2start),
-            M_hard=jetM,
+    def _init_sim(self):
+        """ Initializes simulator """
+
+        return GinkgoSim(
+            jet_p=self.jet_momentum,
+            pt_cut=self.pt_min,
+            Delta_0=torch.tensor(self.jet_mass**2.),
+            M_hard=self.jet_mass,
             num_samples=1,
             minLeaves=self.n_max,
             maxLeaves=self.n_min,
-            maxNTry=max_n_try
+            maxNTry=self.max_n_try
         )
 
-    def _simulate(self, W_rate = 3., QCD_rate = 1.5):
+    def _simulate(self):
         """ Initiates an episode by simulating a new jet """
-        rate = torch.tensor([W_rate, QCD_rate])
+        rate = torch.tensor([self.w_rate, self.qcd_rate])
         self.jet = self.sim(rate)[0]
         self.n = len(self.jet["leaves"])
         self.state = np.zeros((self.n_max, 4))
@@ -125,18 +150,29 @@ class GinkgoLikelihoodEnv(Env):
 
     def _compute_log_likelihood(self, action):
         """ Compute log likelihood of the splitting (i + j) -> i, j, where i, j is the current action """
-        i, j = action
+
         assert self._check_legality(action)
-        parent = self.state[i, :] + self.state[j, :]
-        log_likelihood = ginkgo_log_likelihood(self.state[i])  # TODO
+        i, j = action
+        ti, tj = self._compute_virtuality(self.state[i]), self._compute_virtuality(self.state[j])
+        return ginkgo_log_likelihood(self.state[i], ti, self.state[j], tj, t_cut=self.pt_min, lam=1.)  # TODO: check t_cut, what is lam?!
 
     def _merge(self, action):
         """ Perform action, updating self.n and self.state """
-        i, j = action
+
         assert self._check_legality(action)
+        i, j = action
+
         self.state[i, :] = self.state[i, :] + self.state[j, :]
-        self.state[j, :] = np.zeros(4)
+        for k in range(j, self.n_max - 1):
+            self.state[k, :] = self.state[k+1, :]
+        self.state[-1, :] = np.zeros(4)
         self.n -= 1
 
     def _check_if_done(self):
+        """ Checks if the current episode is done, i.e. if the clustering has reduced all particles to a single one """
         return self.n <= 1
+
+    @staticmethod
+    def _compute_virtuality(p):
+        """ Computes the virtuality t form a four-vector p """
+        return p[0]**2 - p[1]**2 - p[2]**2 - p[3]**2
