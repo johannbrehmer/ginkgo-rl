@@ -1,1 +1,1 @@
-from .envs import GinkgoLikelihoodEnv
+from .envs import GinkgoLikelihoodEnv, GinkgoLikelihood1DWrapper

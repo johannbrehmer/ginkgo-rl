@@ -208,13 +208,14 @@ class GinkgoLikelihoodEnv(Env):
 
         logger.debug(f"Sampling new jet with {self.n} leaves")
 
+    def _check_acceptability(self, action):
+        i, j = action
+        return i >= 0 and j >= 0 and i < self.n_max and j < self.n_max
+
     def _check_legality(self, action):
         """ Check legality of an action """
-
         i, j = action
-        legal = i != j and i >= 0 and j >= 0 and i < self.n and j < self.n
-
-        return legal
+        return self._check_acceptability(action) and i != j and i < self.n and j < self.n
 
     def _compute_log_likelihood(self, action):
         """ Compute log likelihood of the splitting (i + j) -> i, j, where i, j is the current action """
@@ -265,3 +266,34 @@ class GinkgoLikelihoodEnv(Env):
             j = np.random.randint(low=0, high=self.n - 1)
         assert self._check_legality((i, j))
         return i, j
+
+
+class GinkgoLikelihood1DWrapper(GinkgoLikelihoodEnv):
+    """
+    Wrapper around GinkgoLikelihoodEnv to support baseline RL algorithms designed for discrete, non-tuple action spaces.
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.n_actions = self.n_max * (self.n_max - 1) // 2
+        self.action_space = Discrete(self.n_actions)
+
+    def wrap_action(self, action_tuple):
+        assert self._check_acceptability(action_tuple)
+        i, j = max(action_tuple), min(action_tuple)
+        return i  * (i - 1) // 2 + j
+
+    def unwrap_action(self, action_int):
+        i = 1
+        for k in range(1, self.n_max + 1):
+            if k * (k - 1) // 2 > action_int:
+                i = k - 1
+                break
+
+        j = action_int - i * (i - 1) // 2
+
+        assert self._check_acceptability((i, j))
+        return i, j
+
+    def step(self, action):
+        return super().step(self.unwrap_action(action))
