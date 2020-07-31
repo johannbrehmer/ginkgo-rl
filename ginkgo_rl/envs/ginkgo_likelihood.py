@@ -37,14 +37,16 @@ class GinkgoLikelihoodEnv(Env):
         self,
         illegal_reward=-1000.0,
         illegal_actions_patience=10,
-        n_max=20,
-        n_min=10,
+        n_max=30,
+        n_min=3,
         n_target=2,
+        w_jet=True,
         max_n_try=1000,
         w_rate=3.0,
         qcd_rate=1.5,
-        pt_min=0.3 ** 2,
-        jet_mass=80.0,
+        pt_min=4.0 ** 2,
+        qcd_mass=30.0,
+        w_mass=80.0,
         jet_momentum=400.0,
         jetdir=(1, 1, 1),
     ):
@@ -64,10 +66,13 @@ class GinkgoLikelihoodEnv(Env):
         # Simulator settings
         self.n_min = n_min
         self.max_n_try = max_n_try
+        self.w_jet = w_jet
         self.w_rate = w_rate
         self.qcd_rate = qcd_rate
         self.pt_min = pt_min
-        self.jet_mass = jet_mass
+        self.qcd_mass = qcd_mass
+        self.w_mass = w_mass
+        self.jet_mass = self.w_mass if w_jet else self.qcd_mass
         jetdir = np.array(jetdir)
         jetvec = jet_momentum * jetdir / np.linalg.norm(jetdir)
         self.jet_momentum = np.concatenate(([np.sqrt(jet_momentum ** 2 + self.jet_mass ** 2)], jetvec))
@@ -84,7 +89,7 @@ class GinkgoLikelihoodEnv(Env):
 
         # Spaces
         self.action_space = Tuple((Discrete(self.n_max), Discrete(self.n_max)))
-        self.observation_space = Box(low=None, high=None, shape=(self.n_max, 3), dtype=np.float)
+        self.observation_space = Box(low=0., high=max(self.jet_momentum), shape=(self.n_max, 3), dtype=np.float)
 
     def reset(self):
         """ Resets the state of the environment and returns an initial observation. """
@@ -169,9 +174,9 @@ class GinkgoLikelihoodEnv(Env):
     def render(self, mode="human"):
         """ Visualize / report what's happening """
 
-        logger.info(f"{n} particles:")
-        for i, p in self.state[: self.n]:
-            logger.info(f"  p[{i}]")
+        logger.info(f"{self.n} particles:")
+        for i, p in enumerate(self.state[: self.n]):
+            logger.info(f"  p[{i:>2d}] = ({p[0]:5.1f}, {p[1]:5.1f}, {p[2]:5.1f}, {p[3]:5.1f})")
 
     def _init_sim(self):
         """ Initializes simulator """
@@ -182,15 +187,19 @@ class GinkgoLikelihoodEnv(Env):
             Delta_0=torch.tensor(self.jet_mass ** 2.0),
             M_hard=self.jet_mass,
             num_samples=1,
-            minLeaves=self.n_max,
-            maxLeaves=self.n_min,
+            minLeaves=self.n_min,
+            maxLeaves=self.n_max,
             maxNTry=self.max_n_try,
         )
 
     def _simulate(self):
         """ Initiates an episode by simulating a new jet """
 
-        rate = torch.tensor([self.w_rate, self.qcd_rate])
+        rate = torch.tensor([self.w_rate, self.qcd_rate]) if self.w_jet else torch.tensor([self.qcd_rate, self.qcd_rate])
+        jets = self.sim(rate)
+        if not jets:
+            raise RuntimeError(f"Could not generate any jets: {jets}")
+
         self.jet = self.sim(rate)[0]
         self.n = len(self.jet["leaves"])
         self.state = np.zeros((self.n_max, 4))
@@ -215,7 +224,10 @@ class GinkgoLikelihoodEnv(Env):
 
         ti, tj = self._compute_virtuality(self.state[i]), self._compute_virtuality(self.state[j])
         t_cut = self.jet["pt_cut"]
-        lam = self.jet["Lambda"] if self.n > 2 else self.jet["LambdaRoot"]  # W jets have a different lambda for the first split
+        lam = self.jet["Lambda"]
+        if self.n == 2 and self.w_jet:
+            lam = self.jet["LambdaRoot"]  # W jets have a different lambda for the first split
+
         log_likelihood =  ginkgo_log_likelihood(self.state[i], ti, self.state[j], tj, t_cut=t_cut, lam=lam)
 
         logger.debug(f"Computing log likelihood of action {action}: {log_likelihood}")
