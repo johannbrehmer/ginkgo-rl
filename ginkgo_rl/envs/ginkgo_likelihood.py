@@ -35,11 +35,12 @@ class GinkgoLikelihoodEnv(Env):
 
     def __init__(
         self,
-        illegal_reward=-1000.0,
-        illegal_actions_patience=10,
+        illegal_reward=-20.0,
+        illegal_actions_patience=3,
         n_max=30,
         n_min=3,
         n_target=2,
+        min_reward=-20.0,
         w_jet=True,
         max_n_try=1000,
         w_rate=3.0,
@@ -62,6 +63,7 @@ class GinkgoLikelihoodEnv(Env):
         self.illegal_actions_patience = illegal_actions_patience
         self.n_max = n_max
         self.n_target = n_target
+        self.min_reward = min_reward
 
         # Simulator settings
         self.n_min = n_min
@@ -89,7 +91,7 @@ class GinkgoLikelihoodEnv(Env):
 
         # Spaces
         self.action_space = Tuple((Discrete(self.n_max), Discrete(self.n_max)))
-        self.observation_space = Box(low=0., high=max(self.jet_momentum), shape=(self.n_max, 3), dtype=np.float)
+        self.observation_space = Box(low=0., high=max(self.jet_momentum), shape=(self.n_max, 4), dtype=np.float)
 
     def reset(self):
         """ Resets the state of the environment and returns an initial observation. """
@@ -118,7 +120,7 @@ class GinkgoLikelihoodEnv(Env):
 
         logger.debug(f"Environment step. Action: {action}")
 
-        legal = self._check_legality(action)
+        legal = self.check_legality(action)
 
         if legal:
             reward = self._compute_log_likelihood(action)
@@ -212,7 +214,7 @@ class GinkgoLikelihoodEnv(Env):
         i, j = action
         return i >= 0 and j >= 0 and i < self.n_max and j < self.n_max
 
-    def _check_legality(self, action):
+    def check_legality(self, action):
         """ Check legality of an action """
         i, j = action
         return self._check_acceptability(action) and i != j and i < self.n and j < self.n
@@ -220,7 +222,7 @@ class GinkgoLikelihoodEnv(Env):
     def _compute_log_likelihood(self, action):
         """ Compute log likelihood of the splitting (i + j) -> i, j, where i, j is the current action """
 
-        assert self._check_legality(action)
+        assert self.check_legality(action)
         i, j = action
 
         ti, tj = self._compute_virtuality(self.state[i]), self._compute_virtuality(self.state[j])
@@ -229,7 +231,12 @@ class GinkgoLikelihoodEnv(Env):
         if self.n == 2 and self.w_jet:
             lam = self.jet["LambdaRoot"]  # W jets have a different lambda for the first split
 
-        log_likelihood =  ginkgo_log_likelihood(self.state[i], ti, self.state[j], tj, t_cut=t_cut, lam=lam)
+        log_likelihood = ginkgo_log_likelihood(self.state[i], ti, self.state[j], tj, t_cut=t_cut, lam=lam)
+        try:
+            log_likelihood = log_likelihood.item()
+        except:
+            pass
+        log_likelihood = np.clip(log_likelihood, self.min_reward, None)
 
         logger.debug(f"Computing log likelihood of action {action}: {log_likelihood}")
 
@@ -238,7 +245,7 @@ class GinkgoLikelihoodEnv(Env):
     def _merge(self, action):
         """ Perform action, updating self.n and self.state """
 
-        assert self._check_legality(action)
+        assert self.check_legality(action)
         i, j = action
 
         self.state[i, :] = self.state[i, :] + self.state[j, :]
@@ -264,7 +271,7 @@ class GinkgoLikelihoodEnv(Env):
         while i == j:
             i = np.random.randint(low=0, high=self.n - 1)
             j = np.random.randint(low=0, high=self.n - 1)
-        assert self._check_legality((i, j))
+        assert self.check_legality((i, j))
         return i, j
 
 
@@ -296,4 +303,15 @@ class GinkgoLikelihood1DWrapper(GinkgoLikelihoodEnv):
         return i, j
 
     def step(self, action):
-        return super().step(self.unwrap_action(action))
+        try:
+            _, _ = action
+            return super().step(action)
+        except TypeError:
+            return super().step(self.unwrap_action(action))
+
+    def check_legality(self, action):
+        try:
+            _, _ = action
+            return super().check_legality(action)
+        except TypeError:
+            return super().check_legality(self.unwrap_action(action))
