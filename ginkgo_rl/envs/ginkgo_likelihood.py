@@ -1,6 +1,6 @@
 import numpy as np
 from gym import Env
-from gym.spaces import Discrete, Box, Tuple
+from gym.spaces import Discrete, Box, Tuple, MultiDiscrete
 import logging
 from showerSim.invMass_ginkgo import Simulator as GinkgoSim
 from showerSim.likelihood_invM import split_logLH as ginkgo_log_likelihood
@@ -37,10 +37,11 @@ class GinkgoLikelihoodEnv(Env):
         self,
         illegal_reward=-20.0,
         illegal_actions_patience=3,
-        n_max=30,
+        n_max=16,
         n_min=3,
         n_target=2,
         min_reward=-20.0,
+        state_rescaling=0.01,
         w_jet=True,
         max_n_try=1000,
         w_rate=3.0,
@@ -64,6 +65,7 @@ class GinkgoLikelihoodEnv(Env):
         self.n_max = n_max
         self.n_target = n_target
         self.min_reward = min_reward
+        self.state_rescaling = state_rescaling
 
         # Simulator settings
         self.n_min = n_min
@@ -90,8 +92,8 @@ class GinkgoLikelihoodEnv(Env):
         self._simulate()
 
         # Spaces
-        self.action_space = Tuple((Discrete(self.n_max), Discrete(self.n_max)))
-        self.observation_space = Box(low=0., high=max(self.jet_momentum), shape=(self.n_max, 4), dtype=np.float)
+        self.action_space = MultiDiscrete((self.n_max, self.n_max))  # Tuple((Discrete(self.n_max), Discrete(self.n_max)))
+        self.observation_space = Box(low=0., high=state_rescaling * max(self.jet_momentum), shape=(self.n_max, 4), dtype=np.float)
 
     def reset(self):
         """ Resets the state of the environment and returns an initial observation. """
@@ -205,7 +207,7 @@ class GinkgoLikelihoodEnv(Env):
         self.jet = self.sim(rate)[0]
         self.n = len(self.jet["leaves"])
         self.state = np.zeros((self.n_max, 4))
-        self.state[: self.n] = self.jet["leaves"]
+        self.state[: self.n] = self.state_rescaling * self.jet["leaves"]
         self.illegal_action_counter = 0
 
         logger.debug(f"Sampling new jet with {self.n} leaves")
@@ -225,13 +227,13 @@ class GinkgoLikelihoodEnv(Env):
         assert self.check_legality(action)
         i, j = action
 
-        ti, tj = self._compute_virtuality(self.state[i]), self._compute_virtuality(self.state[j])
+        ti, tj = self._compute_virtuality(self.state[i] / self.state_rescaling), self._compute_virtuality(self.state[j]  / self.state_rescaling)
         t_cut = self.jet["pt_cut"]
         lam = self.jet["Lambda"]
         if self.n == 2 and self.w_jet:
             lam = self.jet["LambdaRoot"]  # W jets have a different lambda for the first split
 
-        log_likelihood = ginkgo_log_likelihood(self.state[i], ti, self.state[j], tj, t_cut=t_cut, lam=lam)
+        log_likelihood = ginkgo_log_likelihood(self.state[i] / self.state_rescaling, ti, self.state[j] / self.state_rescaling, tj, t_cut=t_cut, lam=lam)
         try:
             log_likelihood = log_likelihood.item()
         except:
@@ -277,7 +279,7 @@ class GinkgoLikelihoodEnv(Env):
 
 class GinkgoLikelihood1DWrapper(GinkgoLikelihoodEnv):
     """
-    Wrapper around GinkgoLikelihoodEnv to support baseline RL algorithms designed for discrete, non-tuple action spaces.
+    Wrapper around GinkgoLikelihoodEnv to support baseline RL algorithms designed for 1D discrete, non-tuple action spaces.
     """
 
     def __init__(self, *args, **kwargs):
