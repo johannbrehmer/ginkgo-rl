@@ -15,41 +15,51 @@ class InvalidActionException(Exception):
 
 class GinkgoLikelihoodEnv(Env):
     """
-    Ginkgo likelihood-based clustering environment.
+    Ginkgo clustering environment with likelihood-based rewards.
 
-    Each episode represents one clustering process, starting with the leaves and successfully merging pairs of leaves, until just one is left. In each episode
+    Each episode represents one clustering process, starting with all leaves and successfully merging pairs of leaves, until just n_target particles are left. In each episode,
+    a new jet is sampled (with the same initial conditions).
 
-    The states are the leaf four-vectors at any point in the clustering process. They are given as an ndarray with shape (n_max, 4), where n_max is the maximal number of
+    The states are the particle four-vectors at any point in the clustering process. They are given as an ndarray with shape (n_max, 4), where n_max is the maximal number of
     particles (not necessarily equal to the actual number of particles n). For i < n, the [i, 0] component represents energy, the remaining components spatial momentum.
     For i >= n, all components are zero and signify that there are no more particles.
 
     Actions are a tuple of two integers (i, j) with 0 <= i, j < n_max. A tuple (i, j) with i, j < n and i != j means merging the particles i and j. A tuple (i, j) with
     i >= n or j >= n or i = j is illegal.
 
-    Rewards are the log likelihood of a 2 -> 1 merger under the true Ginkgo model. For illegal actions, the reward is instead given by illegal_reward.
+    Rewards are the log likelihood of a 2 -> 1 merger under the true Ginkgo model.
+
+    For illegal actions, the reward is instead given by illegal_reward. The first illegal_actions_patience illegal actions in a row are accepted, incur the illegal_reward reward,
+    but do not change the system. Another illegal action after that incurs the illegal_reward reward and a merger is picked at random.
     """
 
     def __init__(
         self,
-        illegal_reward=-1000.,
+        illegal_reward=-1000.0,
+        illegal_actions_patience=10,
         n_max=20,
         n_min=10,
+        n_target=2,
         max_n_try=1000,
-        w_rate=3.,
+        w_rate=3.0,
         qcd_rate=1.5,
-        pt_min=0.3**2,
-        jet_mass=80.,
-        jet_momentum=400.,
+        pt_min=0.3 ** 2,
+        jet_mass=80.0,
+        jet_momentum=400.0,
         jetdir=(1, 1, 1),
     ):
         super().__init__()
 
         # Checks
-        assert 1 < self.n_min < self.n_max
+        assert 1 <= n_target < n_min < n_max
 
-        # Hyperparameters
+        # Main hyperparameters
         self.illegal_reward = illegal_reward
+        self.illegal_actions_patience = illegal_actions_patience
         self.n_max = n_max
+        self.n_target = n_target
+
+        # Simulator settings
         self.n_min = n_min
         self.max_n_try = max_n_try
         self.w_rate = w_rate
@@ -80,7 +90,7 @@ class GinkgoLikelihoodEnv(Env):
         self._simulate()
         return self.state
 
-    def reset_to(self, n, state, epsilon=1.e-9):
+    def reset_to(self, n, state, epsilon=1.0e-9):
         """ Resets the state of the environment to a given state """
 
         self.jet = None  # Hopefully won't need this
@@ -101,13 +111,40 @@ class GinkgoLikelihoodEnv(Env):
             reward = self._compute_log_likelihood(action)
             self._merge(action)
             done = self._check_if_done()
-            info = {"legal": True}
             self.illegal_action_counter = 0
+            info = {
+                "legal": True,
+                "illegal_action_counter": self.illegal_action_counter,
+                "replace_illegal_action": False,
+                "i": action[0],
+                "j": action[1],
+            }
+
         else:
             reward = self.illegal_reward
-            done = False
-            info = {"legal": False}
             self.illegal_action_counter += 1
+
+            if self.illegal_action_counter > self.illegal_actions_patience:
+                new_action = self._draw_random_legal_action()
+                self._merge(new_action)
+                done = self._check_if_done()
+                info = {
+                    "legal": False,
+                    "illegal_action_counter": self.illegal_action_counter,
+                    "replace_illegal_action": True,
+                    "i": new_action[0],
+                    "j": new_action[1],
+                }
+                self.illegal_action_counter = 0
+            else:
+                done = False
+                info = {
+                    "legal": False,
+                    "illegal_action_counter": self.illegal_action_counter,
+                    "replace_illegal_action": False,
+                    "i": None,
+                    "j": None,
+                }
 
         if done:
             self._simulate()
@@ -118,7 +155,7 @@ class GinkgoLikelihoodEnv(Env):
         """ Visualize / report what's happening """
 
         logger.info(f"{n} particles:")
-        for i, p in self.state[:self.n]:
+        for i, p in self.state[: self.n]:
             logger.info(f"  p[{i}]")
 
     def _init_sim(self):
@@ -127,12 +164,12 @@ class GinkgoLikelihoodEnv(Env):
         return GinkgoSim(
             jet_p=self.jet_momentum,
             pt_cut=self.pt_min,
-            Delta_0=torch.tensor(self.jet_mass**2.),
+            Delta_0=torch.tensor(self.jet_mass ** 2.0),
             M_hard=self.jet_mass,
             num_samples=1,
             minLeaves=self.n_max,
             maxLeaves=self.n_min,
-            maxNTry=self.max_n_try
+            maxNTry=self.max_n_try,
         )
 
     def _simulate(self):
@@ -141,7 +178,7 @@ class GinkgoLikelihoodEnv(Env):
         self.jet = self.sim(rate)[0]
         self.n = len(self.jet["leaves"])
         self.state = np.zeros((self.n_max, 4))
-        self.state[:self.n] = self.jet["leaves"]
+        self.state[: self.n] = self.jet["leaves"]
         self.illegal_action_counter = 0
 
     def _check_legality(self, action):
@@ -154,7 +191,9 @@ class GinkgoLikelihoodEnv(Env):
         assert self._check_legality(action)
         i, j = action
         ti, tj = self._compute_virtuality(self.state[i]), self._compute_virtuality(self.state[j])
-        return ginkgo_log_likelihood(self.state[i], ti, self.state[j], tj, t_cut=self.pt_min, lam=1.)  # TODO: check t_cut, what is lam?!
+        t_cut = self.jet["pt_cut"]
+        lam = self.jet["Lambda"] if self.n > 2 else self.jet["LambdaRoot"]  # W jets have a different lambda for the first split
+        return ginkgo_log_likelihood(self.state[i], ti, self.state[j], tj, t_cut=t_cut, lam=lam)
 
     def _merge(self, action):
         """ Perform action, updating self.n and self.state """
@@ -164,15 +203,23 @@ class GinkgoLikelihoodEnv(Env):
 
         self.state[i, :] = self.state[i, :] + self.state[j, :]
         for k in range(j, self.n_max - 1):
-            self.state[k, :] = self.state[k+1, :]
+            self.state[k, :] = self.state[k + 1, :]
         self.state[-1, :] = np.zeros(4)
         self.n -= 1
 
     def _check_if_done(self):
         """ Checks if the current episode is done, i.e. if the clustering has reduced all particles to a single one """
-        return self.n <= 1
+        return self.n <= self.n_target
 
     @staticmethod
     def _compute_virtuality(p):
         """ Computes the virtuality t form a four-vector p """
-        return p[0]**2 - p[1]**2 - p[2]**2 - p[3]**2
+        return p[0] ** 2 - p[1] ** 2 - p[2] ** 2 - p[3] ** 2
+
+    def _draw_random_legal_action(self):
+        assert not self._check_if_done() and self.n > 1
+        i, j = -1, -1
+        while i == j:
+            i = np.random.randint(low=0, high=self.n - 1)
+            j = np.random.randint(low=0, high=self.n - 1)
+        return i, j
