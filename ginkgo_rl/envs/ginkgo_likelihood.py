@@ -106,19 +106,14 @@ class GinkgoLikelihoodEnv(Env):
         self._simulate()
         return self.state
 
-    def reset_to(self, state, epsilon=1.0e-9):
-        """ Resets the state of the environment to a given state """
+    def get_state(self):
+        return self.state
 
-        logger.debug("Resetting environment to a given state")
+    def get_internal_state(self):
+        return (self.jet, self.n, self.state, self.illegal_action_counter)
 
-        self.jet = None  # Hopefully won't need this
-        self.state = state
-        self.illegal_action_counter = 0
-        self.n = self.n_max
-        for i in range(self.n_max):
-            if np.max(np.abs(self.state[n, :])) < epsilon:
-                self.n = i
-                break
+    def set_internal_state(self, internal_state):
+        self.jet, self.n, self.state, self.illegal_action_counter = internal_state
 
     def step(self, action):
         """ Environment step. """
@@ -303,8 +298,6 @@ class GinkgoLikelihood1DEnv(GinkgoLikelihoodEnv):
                 break
 
         j = action_int - i * (i - 1) // 2
-
-        assert self._check_acceptability((i, j))
         return i, j
 
     def step(self, action):
@@ -313,13 +306,6 @@ class GinkgoLikelihood1DEnv(GinkgoLikelihoodEnv):
             return super().step(action)
         except TypeError:
             return super().step(self.unwrap_action(action))
-
-    def check_legality(self, action):
-        try:
-            _, _ = action
-            return super().check_legality(action)
-        except TypeError:
-            return super().check_legality(self.unwrap_action(action))
 
 
 class PermutationMixin():
@@ -362,3 +348,40 @@ class GinkgoLikelihoodShuffledEnv(PermutationMixin, GinkgoLikelihoodEnv):
             p = self.state[i_]
             if np.max(p) > 0.:
                 logger.info(f"  p[{i:>2d}] = ({p[0]:5.1f}, {p[1]:5.1f}, {p[2]:5.1f}, {p[3]:5.1f})")
+
+    def get_state(self):
+        return self.state[self.permutation, :]
+
+
+class GinkgoLikelihoodShuffled1DEnv(GinkgoLikelihoodShuffledEnv):
+    """
+    Wrapper around GinkgoLikelihoodEnv to support baseline RL algorithms designed for 1D discrete, non-tuple action spaces.
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.n_actions = self.n_max * (self.n_max - 1) // 2
+        self.action_space = Discrete(self.n_actions)
+
+    def wrap_action(self, action_tuple):
+        assert self._check_acceptability(action_tuple)
+        i, j = max(action_tuple), min(action_tuple)
+        return i  * (i - 1) // 2 + j
+
+    def unwrap_action(self, action_int):
+        i = 1
+        for k in range(1, self.n_max + 1):
+            if k * (k - 1) // 2 > action_int:
+                i = k - 1
+                break
+
+        j = action_int - i * (i - 1) // 2
+
+        return i, j
+
+    def step(self, action):
+        try:
+            _, _ = action
+            return super().step(action)
+        except TypeError:
+            return super().step(self.unwrap_action(action))
