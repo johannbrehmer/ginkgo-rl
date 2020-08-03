@@ -5,6 +5,7 @@ import logging
 from showerSim.invMass_ginkgo import Simulator as GinkgoSim
 from showerSim.likelihood_invM import split_logLH as ginkgo_log_likelihood
 import torch
+import itertools
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +23,7 @@ class GinkgoLikelihoodEnv(Env):
 
     The states are the particle four-vectors at any point in the clustering process. They are given as an ndarray with shape (n_max, 4), where n_max is the maximal number of
     particles (not necessarily equal to the actual number of particles n). For i < n, the [i, 0] component represents energy, the remaining components spatial momentum.
-    For i >= n, all components are zero and signify that there are no more particles.
+    For i >= n, all components are set to -1. and signify that there are no more particles.
 
     Actions are a tuple of two integers (i, j) with 0 <= i, j < n_max. A tuple (i, j) with i, j < n and i != j means merging the particles i and j. A tuple (i, j) with
     i >= n or j >= n or i = j is illegal.
@@ -37,11 +38,12 @@ class GinkgoLikelihoodEnv(Env):
         self,
         illegal_reward=-20.0,
         illegal_actions_patience=3,
-        n_max=16,
+        n_max=10,
         n_min=3,
         n_target=2,
         min_reward=-20.0,
         state_rescaling=0.01,
+        padding_value=-1.0,
         w_jet=True,
         max_n_try=1000,
         w_rate=3.0,
@@ -66,6 +68,7 @@ class GinkgoLikelihoodEnv(Env):
         self.n_target = n_target
         self.min_reward = min_reward
         self.state_rescaling = state_rescaling
+        self.padding_value = padding_value
 
         # Simulator settings
         self.n_min = n_min
@@ -93,7 +96,7 @@ class GinkgoLikelihoodEnv(Env):
 
         # Spaces
         self.action_space = MultiDiscrete((self.n_max, self.n_max))  # Tuple((Discrete(self.n_max), Discrete(self.n_max)))
-        self.observation_space = Box(low=0., high=state_rescaling * max(self.jet_momentum), shape=(self.n_max, 4), dtype=np.float)
+        self.observation_space = Box(low=-1., high=state_rescaling * max(self.jet_momentum), shape=(self.n_max, 4), dtype=np.float)
 
     def reset(self):
         """ Resets the state of the environment and returns an initial observation. """
@@ -206,7 +209,7 @@ class GinkgoLikelihoodEnv(Env):
 
         self.jet = self.sim(rate)[0]
         self.n = len(self.jet["leaves"])
-        self.state = np.zeros((self.n_max, 4))
+        self.state = self.padding_value * np.ones((self.n_max, 4))
         self.state[: self.n] = self.state_rescaling * self.jet["leaves"]
         self.illegal_action_counter = 0
 
@@ -253,7 +256,7 @@ class GinkgoLikelihoodEnv(Env):
         self.state[i, :] = self.state[i, :] + self.state[j, :]
         for k in range(j, self.n_max - 1):
             self.state[k, :] = self.state[k + 1, :]
-        self.state[-1, :] = np.zeros(4)
+        self.state[-1, :] = self.padding_value * np.ones(4)
         self.n -= 1
 
         logger.debug(f"Merging particles {i} and {j}. New state has {self.n} particles.")
@@ -277,7 +280,7 @@ class GinkgoLikelihoodEnv(Env):
         return i, j
 
 
-class GinkgoLikelihood1DWrapper(GinkgoLikelihoodEnv):
+class GinkgoLikelihood1DEnv(GinkgoLikelihoodEnv):
     """
     Wrapper around GinkgoLikelihoodEnv to support baseline RL algorithms designed for 1D discrete, non-tuple action spaces.
     """
@@ -317,3 +320,45 @@ class GinkgoLikelihood1DWrapper(GinkgoLikelihoodEnv):
             return super().check_legality(action)
         except TypeError:
             return super().check_legality(self.unwrap_action(action))
+
+
+class PermutationMixin():
+    @staticmethod
+    def _create_permutation(n):
+        permutation, inverse_permutation = [None for _ in range(n)], [None for _ in range(n)]
+        for i, j in enumerate(np.random.permutation(n)):
+            permutation[i] = j
+            inverse_permutation[j] = i
+        return permutation, inverse_permutation
+
+
+class GinkgoLikelihoodShuffledEnv(PermutationMixin, GinkgoLikelihoodEnv):
+    """
+    Wrapper around GinkgoLikelihoodEnv that shuffles the particles so they show up in random positions.
+    """
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.permutation, self.inverse_permutation = self._create_permutation(self.n_max)
+
+    def reset(self):
+        state = super().reset()
+        self.permutation, self.inverse_permutation = self._create_permutation(self.n_max)
+        state = state[self.permutation, :]
+        return state
+
+    def step(self, action):
+        action_ = self.permutation[action[0]], self.permutation[action[1]]
+        state_, reward, done, info = super().step(action_)
+        self.permutation, self.inverse_permutation = self._create_permutation(self.n_max)
+        state = state_[self.permutation, :]
+        return state, reward, done, info
+
+    def render(self, mode="human"):
+        """ Visualize / report what's happening """
+
+        logger.info(f"{self.n} particles:")
+        for i in range(self.n_max):
+            i_ = self.permutation[i]
+            p = self.state[i_]
+            if np.max(p) > 0.:
+                logger.info(f"  p[{i:>2d}] = ({p[0]:5.1f}, {p[1]:5.1f}, {p[2]:5.1f}, {p[3]:5.1f})")
