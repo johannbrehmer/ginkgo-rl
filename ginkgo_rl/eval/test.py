@@ -79,7 +79,7 @@ class GinkgoEvaluator():
 
     def _init_env(self, env_name="GinkgoLikelihoodShuffled1D-v0"):
         env = gym.make(env_name)
-        env.min_reward = -1000.0
+        env.min_reward = None
         env.illegal_reward = 0.
         env.reset()
         return env
@@ -108,9 +108,8 @@ class GinkgoEvaluator():
                 action, _ = model.predict(state)
             state, reward, done, info = env.step(action)
 
-            if info["legal"]:
-                log_likelihood += reward
-            else:
+            log_likelihood += reward
+            if not info["legal"]:
                 errors += 1
 
         return log_likelihood, errors

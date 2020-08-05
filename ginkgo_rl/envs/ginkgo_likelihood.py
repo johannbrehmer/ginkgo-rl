@@ -43,7 +43,7 @@ class GinkgoLikelihoodEnv(Env):
         n_min=2,
         n_target=1,
         min_reward=-50.0,
-        state_rescaling=0.01,
+        state_rescaling=1.0,
         padding_value=-1.0,
         w_jet=True,
         max_n_try=1000,
@@ -90,6 +90,7 @@ class GinkgoLikelihoodEnv(Env):
         self.n = None
         self.state = None
         self.illegal_action_counter = 0
+        self.is_leaf = None
 
         # Prepare simulator
         self.sim = self._init_sim()
@@ -97,7 +98,7 @@ class GinkgoLikelihoodEnv(Env):
 
         # Spaces
         self.action_space = MultiDiscrete((self.n_max, self.n_max))  # Tuple((Discrete(self.n_max), Discrete(self.n_max)))
-        self.observation_space = Box(low=-1., high=state_rescaling * max(self.jet_momentum), shape=(self.n_max, 4), dtype=np.float)
+        self.observation_space = Box(low=self.padding_value, high=state_rescaling * max(self.jet_momentum), shape=(self.n_max, 4), dtype=np.float)
 
     def reset(self):
         """ Resets the state of the environment and returns an initial observation. """
@@ -111,10 +112,10 @@ class GinkgoLikelihoodEnv(Env):
         return self.state
 
     def get_internal_state(self):
-        return copy.deepcopy((self.jet, self.n, self.state, self.illegal_action_counter))
+        return copy.deepcopy((self.jet, self.n, self.state, self.is_leaf, self.illegal_action_counter))
 
     def set_internal_state(self, internal_state):
-        self.jet, self.n, self.state, self.illegal_action_counter = copy.deepcopy(internal_state)
+        self.jet, self.n, self.state, self.is_leaf, self.illegal_action_counter = copy.deepcopy(internal_state)
 
     def step(self, action):
         """ Environment step. """
@@ -208,6 +209,7 @@ class GinkgoLikelihoodEnv(Env):
         self.n = len(self.jet["leaves"])
         self.state = self.padding_value * np.ones((self.n_max, 4))
         self.state[: self.n] = self.state_rescaling * self.jet["leaves"]
+        self.is_leaf = [(i < self.n) for i in range(self.n_max)]
         self.illegal_action_counter = 0
 
         logger.debug(f"Sampling new jet with {self.n} leaves")
@@ -227,7 +229,7 @@ class GinkgoLikelihoodEnv(Env):
         assert self.check_legality(action)
         i, j = action
 
-        ti, tj = self._compute_virtuality(self.state[i] / self.state_rescaling), self._compute_virtuality(self.state[j]  / self.state_rescaling)
+        ti, tj = self._compute_virtuality(i), self._compute_virtuality(j)
         t_cut = self.jet["pt_cut"]
         lam = self.jet["Lambda"]
         if self.n == 2 and self.w_jet:
@@ -251,9 +253,15 @@ class GinkgoLikelihoodEnv(Env):
         i, j = action
 
         self.state[i, :] = self.state[i, :] + self.state[j, :]
+        self.is_leaf[i] = False
+
         for k in range(j, self.n_max - 1):
             self.state[k, :] = self.state[k + 1, :]
+            self.is_leaf[k] = self.is_leaf[k+1]
+
         self.state[-1, :] = self.padding_value * np.ones(4)
+        self.is_leaf[-1] = False
+
         self.n -= 1
 
         logger.debug(f"Merging particles {i} and {j}. New state has {self.n} particles.")
@@ -262,9 +270,12 @@ class GinkgoLikelihoodEnv(Env):
         """ Checks if the current episode is done, i.e. if the clustering has reduced all particles to a single one """
         return self.n <= self.n_target
 
-    @staticmethod
-    def _compute_virtuality(p):
-        """ Computes the virtuality t form a four-vector p """
+    def _compute_virtuality(self, i):
+        """ Computes the virtuality t of particle i """
+        if self.is_leaf[i]:
+            return 0.0  # See discussion with Sebastian
+
+        p = self.state[i, :] / self.state_rescaling
         return p[0] ** 2 - p[1] ** 2 - p[2] ** 2 - p[3] ** 2
 
     def _draw_random_legal_action(self):
