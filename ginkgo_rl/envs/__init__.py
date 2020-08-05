@@ -18,6 +18,6 @@ register(
 )
 register(
     id='GinkgoLikelihoodShuffled1D-v0',
-    entry_point='ginkgo_rl.envs.ginkgo_likelihood:GinkgoLikelihoodShuffledEnv',
+    entry_point='ginkgo_rl.envs.ginkgo_likelihood:GinkgoLikelihoodShuffled1DEnv',
     max_episode_steps=100
 )

@@ -6,6 +6,7 @@ from showerSim.invMass_ginkgo import Simulator as GinkgoSim
 from showerSim.likelihood_invM import split_logLH as ginkgo_log_likelihood
 import torch
 import itertools
+import copy
 
 logger = logging.getLogger(__name__)
 
@@ -36,12 +37,12 @@ class GinkgoLikelihoodEnv(Env):
 
     def __init__(
         self,
-        illegal_reward=-20.0,
-        illegal_actions_patience=3,
+        illegal_reward=-50.0,
+        illegal_actions_patience=5,
         n_max=10,
-        n_min=3,
-        n_target=2,
-        min_reward=-20.0,
+        n_min=2,
+        n_target=1,
+        min_reward=-50.0,
         state_rescaling=0.01,
         padding_value=-1.0,
         w_jet=True,
@@ -110,10 +111,10 @@ class GinkgoLikelihoodEnv(Env):
         return self.state
 
     def get_internal_state(self):
-        return (self.jet, self.n, self.state, self.illegal_action_counter)
+        return copy.deepcopy((self.jet, self.n, self.state, self.illegal_action_counter))
 
     def set_internal_state(self, internal_state):
-        self.jet, self.n, self.state, self.illegal_action_counter = internal_state
+        self.jet, self.n, self.state, self.illegal_action_counter = copy.deepcopy(internal_state)
 
     def step(self, action):
         """ Environment step. """
@@ -145,6 +146,7 @@ class GinkgoLikelihoodEnv(Env):
                 new_action = self._draw_random_legal_action()
                 logger.debug(f"This is the {self.illegal_action_counter}th illegal action in a row. That's enough. Executing random action {new_action} instead.")
 
+                reward += self._compute_log_likelihood(new_action)
                 self._merge(new_action)
                 done = self._check_if_done()
                 info = {
@@ -269,8 +271,8 @@ class GinkgoLikelihoodEnv(Env):
         assert not self._check_if_done() and self.n > 1
         i, j = -1, -1
         while i == j:
-            i = np.random.randint(low=0, high=self.n - 1)
-            j = np.random.randint(low=0, high=self.n - 1)
+            i = np.random.randint(low=0, high=self.n)
+            j = np.random.randint(low=0, high=self.n)
         assert self.check_legality((i, j))
         return i, j
 
