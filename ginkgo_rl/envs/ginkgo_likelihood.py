@@ -42,8 +42,8 @@ class GinkgoLikelihoodEnv(Env):
         n_max=10,
         n_min=2,
         n_target=1,
-        min_reward=-50.0,
-        state_rescaling=1.0,
+        min_reward=-100.0,
+        state_rescaling=0.01,
         padding_value=-1.0,
         w_jet=True,
         max_n_try=1000,
@@ -94,7 +94,7 @@ class GinkgoLikelihoodEnv(Env):
 
         # Prepare simulator
         self.sim = self._init_sim()
-        self._simulate()
+        # self._simulate()
 
         # Spaces
         self.action_space = MultiDiscrete((self.n_max, self.n_max))  # Tuple((Discrete(self.n_max), Discrete(self.n_max)))
@@ -240,9 +240,12 @@ class GinkgoLikelihoodEnv(Env):
             log_likelihood = log_likelihood.item()
         except:
             pass
-        log_likelihood = np.clip(log_likelihood, self.min_reward, None)
 
-        logger.debug(f"Computing log likelihood of action {action}: {log_likelihood}")
+        if self.min_reward is not None:
+            log_likelihood = np.clip(log_likelihood, self.min_reward, None)
+
+        logger.debug(f"Computing log likelihood of action {action}: ti = {ti}, tj = {tj}, t_cut = {t_cut}, lam = {lam} -> log likelihood = {log_likelihood}")
+        # logger.debug(f"Computing log likelihood of action {action}: log likelihood = {log_likelihood}")
 
         return log_likelihood
 

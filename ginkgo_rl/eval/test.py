@@ -3,6 +3,8 @@ import numpy as np
 from matplotlib import pyplot as plt
 import sys
 
+from ginkgo_rl import GinkgoLikelihoodEnv, GinkgoLikelihoodShuffled1DEnv, GinkgoLikelihood1DEnv, GinkgoLikelihoodShuffledEnv
+
 # Workaround for now until Trellis is better packaged
 sys.path.append("/Users/johannbrehmer/work/projects/shower_rl/hierarchical-trellis/src")
 from run_physics_experiment_invM import compare_map_gt_and_bs_trees as compute_trellis
@@ -27,7 +29,7 @@ class GinkgoEvaluator():
         self.log_likelihoods[method] = [[self._compute_maximum_log_likelihood(jet)] for jet in self.jets]
         self.illegal_actions[method] = [[0] for _ in self.jets]
 
-    def eval(self, method, model, env_name, n_repeats=400):
+    def eval(self, method, model, env_name, n_repeats=100):
         env = self._init_env(env_name)
 
         self.methods.append(method)
@@ -41,14 +43,14 @@ class GinkgoEvaluator():
                 self.log_likelihoods[method][i].append(log_likelihood)
                 self.illegal_actions[method][i].append(error)
 
-    def eval_random(self, method, env_name, n_repeats=400):
+    def eval_random(self, method, env_name, n_repeats=100):
         self.eval(method, None, env_name, n_repeats)
 
     def get_results(self):
         for method in self.methods:
             yield method, self.log_likelihoods[method], self.illegal_actions[method]
 
-    def plot_log_likelihoods(self, cols=2, rows=4, ymax=0.25, xmin=-100., xmax=10., xbins=35, panelsize=4.):
+    def plot_log_likelihoods(self, cols=2, rows=4, ymax=0.25, deltax_min = 10., deltax_max = 100., xbins=35, panelsize=4.):
         colors = [f"C{i}" for i in range(20)]
         fig = plt.figure(figsize=(rows*panelsize, cols*panelsize))
 
@@ -58,12 +60,20 @@ class GinkgoEvaluator():
 
             plt.subplot(cols, rows, j + 1)
 
+            xs = np.concatenate([logp[j] for logp in self.log_likelihoods.values()], axis=0)
+            xmin, xmax = np.min(xs), np.max(xs)
+            xmin = np.clip(xmin, xmax - deltax_max, xmax - deltax_min)
+            xmax = xmax + 0.05 * (xmax - xmin)
+            xmin = xmin - 0.05 * (xmax - xmin)
+
             for i, (name, logp, _) in enumerate(self.get_results()):
+                logp_ = np.clip(logp, xmin + 1.e-9, xmax - 1.e-9)
+                
                 if len(logp[j]) == 1:
-                    plt.plot([logp[j][0], logp[j][0]], [0., ymax], color=colors[i], ls="--", label=name)
+                    plt.plot([logp_[j][0], logp_[j][0]], [0., ymax], color=colors[i], ls="--", label=name)
                 else:
-                    plt.hist(logp[j], histtype="stepfilled", range=(xmin, xmax), color=colors[i], bins=xbins, lw=1.5, density=True, alpha=0.2)
-                    plt.hist(logp[j], histtype="step", range=(xmin, xmax), bins=xbins, color=colors[i], lw=1.5, density=True, label=name)
+                    plt.hist(logp_[j], histtype="stepfilled", range=(xmin, xmax), color=colors[i], bins=xbins, lw=1.5, density=True, alpha=0.2)
+                    plt.hist(logp_[j], histtype="step", range=(xmin, xmax), bins=xbins, color=colors[i], lw=1.5, density=True, label=name)
 
             if j == 0:
                 plt.legend()
@@ -77,10 +87,18 @@ class GinkgoEvaluator():
         plt.tight_layout()
         return fig
 
-    def _init_env(self, env_name="GinkgoLikelihoodShuffled1D-v0"):
-        env = gym.make(env_name)
-        env.min_reward = None
-        env.illegal_reward = 0.
+    def _init_env(self, env_name="GinkgoLikelihood-v0"):
+        if env_name == "GinkgoLikelihood-v0":
+            env = GinkgoLikelihoodEnv(min_reward=None, illegal_reward=0., illegal_actions_patience=3)
+        elif env_name == "GinkgoLikelihood1D-v0":
+            env = GinkgoLikelihood1DEnv(min_reward=None, illegal_reward=0., illegal_actions_patience=3)
+        elif env_name == "GinkgoLikelihoodShuffled-v0":
+            env = GinkgoLikelihoodShuffledEnv(min_reward=None, illegal_reward=0., illegal_actions_patience=3)
+        elif env_name == "GinkgoLikelihoodShuffled1D-v0":
+            env = GinkgoLikelihoodShuffled1DEnv(min_reward=None, illegal_reward=0., illegal_actions_patience=3)
+        else:
+            raise ValueError(env_name)
+
         env.reset()
         return env
 
