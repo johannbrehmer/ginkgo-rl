@@ -29,7 +29,7 @@ class GinkgoEvaluator():
         self.log_likelihoods[method] = [[self._compute_maximum_log_likelihood(jet)] for jet in self.jets]
         self.illegal_actions[method] = [[0] for _ in self.jets]
 
-    def eval(self, method, model, env_name, n_repeats=100):
+    def eval(self, method, model, env_name, n_repeats=400):
         env = self._init_env(env_name)
 
         self.methods.append(method)
@@ -43,14 +43,14 @@ class GinkgoEvaluator():
                 self.log_likelihoods[method][i].append(log_likelihood)
                 self.illegal_actions[method][i].append(error)
 
-    def eval_random(self, method, env_name, n_repeats=100):
+    def eval_random(self, method, env_name, n_repeats=400):
         self.eval(method, None, env_name, n_repeats)
 
     def get_results(self):
         for method in self.methods:
             yield method, self.log_likelihoods[method], self.illegal_actions[method]
 
-    def plot_log_likelihoods(self, cols=2, rows=4, ymax=0.25, deltax_min = 10., deltax_max = 100., xbins=35, panelsize=4.):
+    def plot_log_likelihoods(self, cols=2, rows=4, ymax=0.25, deltax_min = 10., deltax_max = 50., xbins=35, panelsize=4.):
         colors = [f"C{i}" for i in range(20)]
         fig = plt.figure(figsize=(rows*panelsize, cols*panelsize))
 
@@ -68,7 +68,7 @@ class GinkgoEvaluator():
 
             for i, (name, logp, _) in enumerate(self.get_results()):
                 logp_ = np.clip(logp, xmin + 1.e-9, xmax - 1.e-9)
-                
+
                 if len(logp[j]) == 1:
                     plt.plot([logp_[j][0], logp_[j][0]], [0., ymax], color=colors[i], ls="--", label=name)
                 else:
