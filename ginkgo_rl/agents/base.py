@@ -145,20 +145,20 @@ class BatchedActorCriticAgent(Agent):
             {"legal_actions": legal_actions, "action_id": action_id, "log_probs": log_probs, "log_prob": log_probs[action_id], "values": qs, "value": qs[action_id]},
         )
 
-    # def _evaluate(self, states, legal_actions_list):
-    #     all_qs = []
-    #     all_log_probs = []
-    #
-    #     for state, legal_actions in zip(states, legal_actions_list):
-    #         batch_states = self._batch_state(state, legal_actions)
-    #         log_probs, qs = self._evaluate_batch_states(batch_states)
-    #         all_qs.append(qs.flatten().unsqueeze(0))
-    #         all_log_probs.append(log_probs.unsqueeze(0))
-    #
-    #     all_qs = torch.cat(all_qs, dim=0)
-    #     all_log_probs = torch.cat(all_log_probs, dim=0)
-    #
-    #     return all_log_probs, all_qs
+    def _evaluate(self, states, legal_actions_list):
+        all_qs = []
+        all_log_probs = []
+
+        for state, legal_actions in zip(states, legal_actions_list):
+            batch_states = self._batch_state(state, legal_actions)
+            log_probs, qs = self._evaluate_batch_states(batch_states)
+            all_qs.append(qs.flatten().unsqueeze(0))
+            all_log_probs.append(log_probs.unsqueeze(0))
+
+        all_qs = torch.cat(all_qs, dim=0)
+        all_log_probs = torch.cat(all_log_probs, dim=0)
+
+        return all_log_probs, all_qs
 
     def _update(self, state, reward, value, action, done, next_state, next_reward, num_episode):
         raise NotImplementedError
