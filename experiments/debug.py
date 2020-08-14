@@ -5,7 +5,9 @@ import gym
 import logging
 
 sys.path.append("../")
-from ginkgo_rl import GinkgoLikelihoodEnv
+from ginkgo_rl import GinkgoLikelihoodShuffled1DEnv
+from ginkgo_rl import BatchedACERAgent
+
 
 # Logging setup
 logging.basicConfig(
@@ -19,4 +21,7 @@ for key in logging.Logger.manager.loggerDict:
     if "ginkgo_rl" not in key:
         logging.getLogger(key).setLevel(logging.WARNING)
 
-env = GinkgoLikelihoodEnv()
+env = GinkgoLikelihoodShuffled1DEnv()
+
+model = BatchedACERAgent(env)
+model.learn(total_timesteps=1000)
