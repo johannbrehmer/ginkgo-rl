@@ -2,8 +2,10 @@ from collections import OrderedDict
 import numpy as np
 import torch
 import random
+import copy
 
 from .base import Agent
+from ..utils.normalization import ginkgo_reward_normalizer
 
 
 class MCTSNode:
@@ -67,6 +69,17 @@ class MCTSNode:
         if backpropagate and self.parent:
             self.parent.give_reward(reward, backpropagate=True)
 
+    def prune(self, update_q=0.):
+        """ Steps into a subtree and updates all paths (and the new root's parent link) """
+        self.path = self.path[1:]
+        self.q += update_q
+
+        if len(self.path) == 0:
+            self.parent = None
+
+        for child in self.children.values():
+            child.prune(update_q=update_q)
+
     def _compute_pucts(self, policy_probs=None, c_puct=1.0):
         if policy_probs is None:  # By default assume a uniform policy
             policy_probs = 1. / len(self)
@@ -86,11 +99,19 @@ class MCTSNode:
 class BaseMCAgent(Agent):
     def __init__(
         self,
+        n_mc=1000,
+        c_puct=1.0,
+        reward_normalizer=None
         *args,
         **kwargs
     ):
         super().__init__(*args, **kwargs)
 
+        self.n_mc = n_mc
+        self.c_puct = c_puct
+        self.reward_normalizer=ginkgo_reward_normalizer if reward_normalizer is None else reward_normalizer
+
+        self.mcts_head = self._init_mcts()
 
     def learn(self, total_timesteps):
         raise NotImplementedError
@@ -102,27 +123,41 @@ class BaseMCAgent(Agent):
             return actions[0]
 
         # Run MCTS
-        action, info = self._mcts()
+        action, info = self._mcts(n=self.n)
         return action, info
 
     def _update(self, state, reward, value, action, done, next_state, next_reward, num_episode):
+        """ Updates after environment reaction """
+
+        # MCTS updates
+        if done:
+            # Reset MCTS when done with an episode
+            self.mcts_head = self._init_mcts()
+        else:
+            # Update MCTS tree when deciding on an action
+            self.mcts_head = self.mcts_head.children[action]
+            self.mcts_head.prune(update_q= - reward)  # This updates the node.path and node.q fields
+
+        # Policy training
         raise NotImplementedError
 
-    def _initialize_game(self, state):
-        self.available_cards = list(range(self.num_cards))
-        self.num_players = self._num_players_from_state(state)
+    def _parse_path(self, state, path):
+        """ Given a path (list of actions), computes the resulting environment state and total reward """
+        # TODO: ensure that self.env always has current state, i.e. that state == self.env.state
 
-    def _path_to_state(self, state, path):
-        """ Given an initial state and a path (list of actions), computes the resulting environment state """
-        raise NotImplementedError
+        env = copy.deepcopy(self.env)
 
-    def _find_legal_actions(self, state):
-        """ Given a path (list of actions), finds all allowed actions """
-        raise NotImplementedError
+        # Follow path
+        total_reward = 0.
+        for action in path:
+            state, reward, done, info = env.step(action)
+            total_reward += reward
 
-    def _compute_reward(self, path):
-        """ Given a path (list of actions), compute the reward """
-        raise NotImplementedError
+        return state, total_reward
+
+    def _init_mcts(self):
+        """ Initializes MCTS tree """
+        return MCTSNode(None, [])
 
     def _check_if_path_terminates(self, initial_state, path):
         """ Given an initial state and a path (list of actions), check if the final state is terminal """
@@ -132,21 +167,20 @@ class BaseMCAgent(Agent):
         """ Run Monte-Carl tree search from state for n trajectories"""
 
         # Set up MCTS graph
-        # TODO: retain information between successive mergings
-        head = MCTSNode(None, [])
-        head.set_terminal(self._check_if_path_is_terminal(state, head.path))
+        if self.mcts_head.terminal is None:
+            self.mcts_head.set_terminal(self._check_if_path_is_terminal(state, self.mcts_head.path))
 
         # Run n trajectories using PUCT based on policy
         for _ in range(n):
-            node = head
-            node.set_terminal(self._check_if_path_is_terminal(self.state, node.path))
+            node = self.mcts_head
+            total_reward = 0.0
 
             while not node.terminal:
-                this_state = self._path_to_state(state, node.path)
+                this_state, total_reward = self._parse_path(state, node.path)
 
                 # Expand
                 if not node.children:
-                    actions = self._find_legal_actions(this_state)
+                    actions = self._legal_action_extractor(this_state)
                     node.expand(actions)
 
                 # Select
@@ -156,75 +190,14 @@ class BaseMCAgent(Agent):
                     node.set_terminal(self._check_if_path_is_terminal(state, node.path))
 
             # Backpropagate
-            reward = self._compute_reward(node.path)
-            node.give_reward(reward, backpropagate=True)
+            node.give_reward(total_reward, backpropagate=True)
 
         # Select best action
-        action = head.select_best()
+        action = self.mcts_head.select_best()
         info = {}
 
         return action, info
 
-
-    # def _mcts(self, legal_actions, state):
-    #     n = len(legal_actions)
-    #     n_mc = self._compute_n_mc(n)
-    #     outcomes = {action : [] for action in legal_actions}
-    #     log_probs = {action : [] for action in legal_actions}
-    #
-    #     for _ in range(n_mc):
-    #         env = self._draw_env(legal_actions, state)
-    #         action, log_prob, outcome = self._play_out(env, outcomes)
-    #         outcomes[action].append(outcome)
-    #         log_probs[action].append(log_prob)
-    #
-    #     action, info = self._choose_action_from_outcomes(outcomes, log_probs)
-    #     return action, info
-    #
-    # def _play_out(self, env, outcomes):
-    #     states, all_legal_actions = env._create_states()
-    #     states = self._tensorize(states)
-    #     done = False
-    #     outcome = 0.
-    #     initial_action = None
-    #     initial_log_prob = None
-    #
-    #     while not done:
-    #         actions, agent_infos = [], []
-    #         for i, (state, legal_actions) in enumerate(zip(states, all_legal_actions)):
-    #             action, log_prob = self._choose_action_mc(legal_actions, state, outcomes, first_move=(initial_action is None), opponent=(i > 0))
-    #             actions.append(int(action))
-    #
-    #             if initial_action is None:
-    #                 initial_action = action
-    #                 initial_log_prob = log_prob
-    #
-    #         (next_states, next_all_legal_actions), next_rewards, done, _ = env.step(actions)
-    #         next_states = self._tensorize(next_states)
-    #
-    #         outcome += next_rewards[0]
-    #         states = next_states
-    #         all_legal_actions = next_all_legal_actions
-    #
-    #     return initial_action, initial_log_prob, outcome
-    #
-    # def _choose_action_from_outcomes(self, outcomes, log_probs):
-    #     best_action = list(outcomes.keys())[0]
-    #     best_mean = - float("inf")
-    #
-    #     for action, outcome in outcomes.items():
-    #         if np.mean(outcome) > best_mean:
-    #             best_action = action
-    #             best_mean = np.mean(outcome)
-    #
-    #     info = {"log_prob": log_probs[best_action][0]}
-    #
-    #     logger.debug("AlphaAlmostZero thoughts:")
-    #     for action, outcome in outcomes.items():
-    #         chosen = 'x' if action == best_action else ' '
-    #         logger.debug(f"  {chosen} {action + 1:>3d}: p = {np.exp(log_probs[action][0].detach().numpy()):.2f}, n = {len(outcome):>3d}, E[r] = {np.mean(outcome):>5.1f}")
-    #
-    #     return best_action, info
-    #
-    # def _choose_action_mc(self, legal_actions, state, outcomes, first_move=True, opponent=False):
-    #     raise NotImplementedError
+    def _evaluate_policy(self, state, legal_actions):
+        """ Evaluates the policy on the state and returns the probabilities for each action """
+        raise NotImplementedError

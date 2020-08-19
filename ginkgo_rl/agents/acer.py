@@ -46,6 +46,7 @@ class BatchedACERAgent(BatchedActorCriticAgent):
     def _train(self, on_policy=True):
         # Rollout
         action_ids, done, is_first, legal_actions_list, log_probs_then, rewards, states = self._rollout(on_policy)
+        assert legal_actions_list
 
         log_probs_now, q = self._evaluate(states, legal_actions_list)
         q_a = q.gather(1, action_ids)
