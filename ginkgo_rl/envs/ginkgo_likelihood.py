@@ -211,6 +211,7 @@ class GinkgoLikelihoodEnv(Env):
         self.state[: self.n] = self.state_rescaling * self.jet["leaves"]
         self.is_leaf = [(i < self.n) for i in range(self.n_max)]
         self.illegal_action_counter = 0
+        self._sort_state()
 
         logger.debug(f"Sampling new jet with {self.n} leaves")
 
@@ -222,6 +223,11 @@ class GinkgoLikelihoodEnv(Env):
         """ Check legality of an action """
         i, j = action
         return self._check_acceptability(action) and i != j and i < self.n and j < self.n
+
+    def _sort_state(self):
+        idx = sorted(list(range(self.n_max)), reverse=True, key=lambda i : self.state[i, 0])
+        self.state = self.state[idx, :]
+        self.is_leaf = np.asarray(self.is_leaf, dtype=np.bool)[idx]
 
     def _compute_log_likelihood(self, action):
         """ Compute log likelihood of the splitting (i + j) -> i, j, where i, j is the current action """
@@ -266,6 +272,7 @@ class GinkgoLikelihoodEnv(Env):
         self.is_leaf[-1] = False
 
         self.n -= 1
+        self._sort_state()
 
         logger.debug(f"Merging particles {i} and {j}. New state has {self.n} particles.")
 
