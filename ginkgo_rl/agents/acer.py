@@ -65,7 +65,7 @@ class BatchedActorCriticAgent(Agent):
 
         return all_log_probs, all_qs
 
-    def _update(self, state, reward, value, action, done, next_state, next_reward, num_episode, **kwargs):
+    def _update(self, state, reward, action, done, next_state, next_reward, num_episode, **kwargs):
         raise NotImplementedError
 
     def _batch_state(self, state, legal_actions):
@@ -122,7 +122,7 @@ class BatchedACERAgent(BatchedActorCriticAgent):
     def _init_replay_buffer(self, history_length):
         self.history = SequentialHistory(max_length=history_length, dtype=self.dtype, device=self.device)
 
-    def _update(self, state, reward, value, action, done, next_state, next_reward, num_episode, **kwargs):
+    def _update(self, state, reward, action, done, next_state, next_reward, num_episode, **kwargs):
         self.history.store(
             state=state,
             legal_actions=self._legal_action_extractor(state, self.env),

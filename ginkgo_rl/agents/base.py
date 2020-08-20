@@ -92,7 +92,7 @@ class Agent(nn.Module):
     def _init_replay_buffer(self, history_length):
         self.history = History(max_length=history_length, dtype=self.dtype, device=self.device)
 
-    def _update(self, state, reward, value, action, done, next_state, next_reward, num_episode, **kwargs):
+    def _update(self, state, reward, action, done, next_state, next_reward, num_episode, **kwargs):
         """
         Is called at the end of each step, gives the agent the chance to a) update the replay buffer and b) learn its weights.
         """

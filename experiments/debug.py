@@ -23,5 +23,5 @@ for key in logging.Logger.manager.loggerDict:
 
 env = GinkgoLikelihood1DEnv()
 
-model = RandomMCTSAgent(env)
+model = MCTSAgent(env)
 model.learn(total_timesteps=10)
