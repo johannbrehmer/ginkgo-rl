@@ -4,10 +4,13 @@ import torch
 from torch import nn
 import random
 import copy
+import logging
 
 from .base import Agent
 from ..utils.normalization import AffineNormalizer
 from ..utils.nets import MultiHeadedMLP
+
+logger = logging.getLogger(__name__)
 
 
 class MCTSNode:
@@ -58,6 +61,7 @@ class MCTSNode:
     def select_best(self):
         best_q = - float("inf")
         choice = None
+
         for action, child in self.children.values():
             if child.q > best_q:
                 best_q = child.q
@@ -89,9 +93,13 @@ class MCTSNode:
         if policy_probs is None:  # By default assume a uniform policy
             policy_probs = 1. / len(self)
 
-        q_children = np.asarray([self.reward_normalizer.evaluate(child.q) for child in self.children.values()])
-        n_children = np.asarray([child.n for child in self.children.values()])
-        mean_q_children = np.where(n_children > 0, q_children / n_children, self.reward_normalizer.evaluate(self.q) / self.n)
+        if self.n > 0:
+            q_children = np.asarray([self.reward_normalizer.evaluate(child.q) for child in self.children.values()])
+            n_children = np.asarray([child.n for child in self.children.values()])
+            mean_q_children = np.where(n_children > 0, q_children / n_children, self.reward_normalizer.evaluate(self.q) / self.n)
+        else:
+            n_children = np.zeros(len(self))
+            mean_q_children = 0.5 * np.ones(len(self))
 
         pucts = mean_q_children + c_puct * policy_probs * (self.n + 1.e-9) ** 0.5 / (1. + n_children)
 
@@ -104,9 +112,9 @@ class MCTSNode:
 class BaseMCTSAgent(Agent):
     def __init__(
         self,
-        n_mc=1000,
-        c_puct=1.0,
         *args,
+        n_mc=100,
+        c_puct=1.0,
         **kwargs
     ):
         super().__init__(*args, **kwargs)
@@ -115,17 +123,14 @@ class BaseMCTSAgent(Agent):
         self.c_puct = c_puct
         self.mcts_head = self._init_mcts()
 
-    def learn(self, total_timesteps):
-        raise NotImplementedError
-
-    def predict(self, state):
+    def _predict(self, state):
         # If there is only one action, don't bother with MCTS
         actions = self._find_legal_actions(state)
         if len(actions) == 1:
-            return actions[0]
+            return actions[0], {"log_prob": 1.0}
 
         # Run MCTS
-        action, info = self._mcts(n=self.n)
+        action, info = self._mcts(state, n=self.n_mc)
         return action, info
 
     def _update(self, state, reward, value, action, done, next_state, next_reward, num_episode, **kwargs):
@@ -156,15 +161,21 @@ class BaseMCTSAgent(Agent):
     def _parse_path(self, state, path):
         """ Given a path (list of actions), computes the resulting environment state and total reward """
 
-        # Ensure that self.env always has current state
-        assert np.isclose(state, self.env.state)
-        env = copy.deepcopy(self.env)
+        # Store env state state
+        assert np.all(np.isclose(state, self.env.state))
+        internal_state = self.env.get_internal_state()
+        verbose_state = self.env.verbose
+        self.env.verbose = False
 
         # Follow path
         total_reward = 0.
         for action in path:
-            state, reward, done, info = env.step(action)
+            state, reward, done, info = self.env.step(action)
             total_reward += reward
+
+        # Reset env
+        self.env.verbose = verbose_state
+        self.env.set_internal_state(internal_state)
 
         return state, total_reward
 
@@ -175,14 +186,14 @@ class BaseMCTSAgent(Agent):
 
     def _check_if_path_terminates(self, initial_state, path):
         """ Given an initial state and a path (list of actions), check if the final state is terminal """
-        return len(path) >= len(self._legal_action_extractor(initial_state)) - 1
+        return len(path) >= len(self._find_legal_actions(initial_state)) - 1
 
     def _mcts(self, state, n):
         """ Run Monte-Carl tree search from state for n trajectories"""
 
         # Set up MCTS graph
         if self.mcts_head.terminal is None:
-            self.mcts_head.set_terminal(self._check_if_path_is_terminal(state, self.mcts_head.path))
+            self.mcts_head.set_terminal(self._check_if_path_terminates(state, self.mcts_head.path))
 
         # Run n trajectories using PUCT based on policy
         for _ in range(n):
@@ -194,21 +205,36 @@ class BaseMCTSAgent(Agent):
 
                 # Expand
                 if not node.children:
-                    actions = self._legal_action_extractor(this_state)
+                    actions = self._find_legal_actions(this_state)
                     node.expand(actions)
 
                 # Select
                 policy_probs = self._evaluate_policy(this_state, node.children.keys())
-                node = node.select_puct(policy_probs, self.c_puct)
+                action = node.select_puct(policy_probs, self.c_puct)
+                node = node.children[action]
                 if node.terminal is None:
-                    node.set_terminal(self._check_if_path_is_terminal(state, node.path))
+                    terminal = self._check_if_path_terminates(state, node.path)
+                    node.set_terminal(terminal)
 
             # Backup
             node.give_reward(total_reward, backup=True)
 
         # Select best action
         action = self.mcts_head.select_best()
-        info = {"log_prob": self._evaluate_policy(state, self._legal_action_extractor(state), action=action)}
+        info = {"log_prob": torch.log(self._evaluate_policy(state, self._find_legal_actions(state), action=action))}
+
+        # Debug output
+        probs_ =  self._evaluate_policy(state, self._find_legal_actions(state))
+        logger.debug("MCTS results:")
+        for i, (action_, node_) in enumerate(self.mcts_head.children.items()):
+            chosen = 'x' if action_ == action else ' '
+            logger.debug(
+                f"  {chosen} {action:>3d}: "
+                f"p = {probs_[i].detach().item():.2f}, "
+                f"n = {node_.n:>3d}, "
+                f"q = {node_.q / node_.n:>5.1f}, "
+                f"q_norm = {node_.reward_normalizer.evaluate(node_.q) / node_.n:>5.1f}"
+            )
 
         return action, info
 
@@ -234,13 +260,13 @@ class RandomMCTSAgent(BaseMCTSAgent):
 
 
 class MCTSAgent(BaseMCTSAgent):
-    def __init__(self, hidden_sizes=(100,100,), activation=nn.ReLU, *args, **kwargs):
+    def __init__(self, *args, hidden_sizes=(100,100,), activation=nn.ReLU, **kwargs):
         super().__init__(*args, **kwargs)
 
         self.actor = MultiHeadedMLP(self.state_length + 1, hidden_sizes=hidden_sizes, head_sizes=(1,), activation=activation, head_activations=(None,))
         self.softmax = nn.Softmax(dim=0)
 
-    def _evaluate_policy(self, state, legal_actions):
+    def _evaluate_policy(self, state, legal_actions, action=None):
         batch_states = []
 
         for action in legal_actions:
@@ -251,6 +277,11 @@ class MCTSAgent(BaseMCTSAgent):
 
         (probs,) = self.actor(batch_states)
         probs = self.softmax(probs).flatten()
+
+        if action is not None:
+            assert action in legal_actions
+            return probs[legal_actions.index(action)]
+
         return probs
 
     def _train(self):

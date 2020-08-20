@@ -54,6 +54,7 @@ class GinkgoLikelihoodEnv(Env):
         w_mass=80.0,
         jet_momentum=400.0,
         jetdir=(1, 1, 1),
+        verbose=True,
     ):
         super().__init__()
 
@@ -70,6 +71,7 @@ class GinkgoLikelihoodEnv(Env):
         self.min_reward = min_reward
         self.state_rescaling = state_rescaling
         self.padding_value = padding_value
+        self.verbose = verbose
 
         # Simulator settings
         self.n_min = n_min
@@ -103,7 +105,8 @@ class GinkgoLikelihoodEnv(Env):
     def reset(self):
         """ Resets the state of the environment and returns an initial observation. """
 
-        logger.debug("Resetting environment")
+        if self.verbose:
+            logger.debug("Resetting environment")
 
         self._simulate()
         return self.state
@@ -120,7 +123,8 @@ class GinkgoLikelihoodEnv(Env):
     def step(self, action):
         """ Environment step. """
 
-        logger.debug(f"Environment step. Action: {action}")
+        if self.verbose:
+            logger.debug(f"Environment step. Action: {action}")
 
         legal = self.check_legality(action)
 
@@ -138,14 +142,16 @@ class GinkgoLikelihoodEnv(Env):
             }
 
         else:
-            logger.debug(f"Action {action} is illegal (n = {self.n}).")
+            if self.verbose:
+                logger.debug(f"Action {action} is illegal (n = {self.n}).")
 
             reward = self.illegal_reward
             self.illegal_action_counter += 1
 
             if self.illegal_action_counter > self.illegal_actions_patience:
                 new_action = self._draw_random_legal_action()
-                logger.debug(f"This is the {self.illegal_action_counter}th illegal action in a row. That's enough. Executing random action {new_action} instead.")
+                if self.verbose:
+                    logger.debug(f"This is the {self.illegal_action_counter}th illegal action in a row. That's enough. Executing random action {new_action} instead.")
 
                 reward += self._compute_log_likelihood(new_action)
                 self._merge(new_action)
@@ -159,7 +165,8 @@ class GinkgoLikelihoodEnv(Env):
                 }
                 self.illegal_action_counter = 0
             else:
-                logger.debug(f"This is the {self.illegal_action_counter}th illegal action in a row. Try again. (Environment state is unchanged.)")
+                if self.verbose:
+                    logger.debug(f"This is the {self.illegal_action_counter}th illegal action in a row. Try again. (Environment state is unchanged.)")
 
                 done = False
                 info = {
@@ -171,7 +178,8 @@ class GinkgoLikelihoodEnv(Env):
                 }
 
         if done:
-            logger.debug("Episode is done.")
+            if self.verbose:
+                logger.debug("Episode is done.")
             self._simulate()
 
         return self.state, reward, done, info
@@ -213,7 +221,8 @@ class GinkgoLikelihoodEnv(Env):
         self.illegal_action_counter = 0
         self._sort_state()
 
-        logger.debug(f"Sampling new jet with {self.n} leaves")
+        if self.verbose:
+            logger.debug(f"Sampling new jet with {self.n} leaves")
 
     def _check_acceptability(self, action):
         i, j = action
@@ -250,8 +259,9 @@ class GinkgoLikelihoodEnv(Env):
         if self.min_reward is not None:
             log_likelihood = np.clip(log_likelihood, self.min_reward, None)
 
-        logger.debug(f"Computing log likelihood of action {action}: ti = {ti}, tj = {tj}, t_cut = {t_cut}, lam = {lam} -> log likelihood = {log_likelihood}")
-        # logger.debug(f"Computing log likelihood of action {action}: log likelihood = {log_likelihood}")
+        if self.verbose:
+            logger.debug(f"Computing log likelihood of action {action}: ti = {ti}, tj = {tj}, t_cut = {t_cut}, lam = {lam} -> log likelihood = {log_likelihood}")
+            # logger.debug(f"Computing log likelihood of action {action}: log likelihood = {log_likelihood}")
 
         return log_likelihood
 
@@ -274,7 +284,8 @@ class GinkgoLikelihoodEnv(Env):
         self.n -= 1
         self._sort_state()
 
-        logger.debug(f"Merging particles {i} and {j}. New state has {self.n} particles.")
+        if self.verbose:
+            logger.debug(f"Merging particles {i} and {j}. New state has {self.n} particles.")
 
     def _check_if_done(self):
         """ Checks if the current episode is done, i.e. if the clustering has reduced all particles to a single one """

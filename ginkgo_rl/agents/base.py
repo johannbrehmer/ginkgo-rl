@@ -15,8 +15,7 @@ logger = logging.getLogger(__name__)
 class Agent(nn.Module):
     """ Abstract base agent class """
 
-    def __init__(self, env, legal_action_extractor=None, gamma=0.99, optim_kwargs=None, history_length=None, dtype=torch.float, device=torch.device("cpu"), *args, **kwargs):
-
+    def __init__(self, env, gamma=1.00, optim_kwargs=None, history_length=None, dtype=torch.float, device=torch.device("cpu"), *args, **kwargs):
         self.env = env
         self.gamma = gamma
         self.device = device
@@ -28,15 +27,17 @@ class Agent(nn.Module):
         self._init_replay_buffer(history_length)
         self.optimizer = None
         self.optim_kwargs = optim_kwargs
-        self._legal_action_extractor = ginkgo1d_legal_action_extractor if legal_action_extractor is None else legal_action_extractor
 
         super().__init__()
 
     def learn(self, total_timesteps):
         # Prepare training
         self.train()
-        optim_kwargs = {} if self.optim_kwargs is None else self.optim_kwargs
-        self.optimizer = torch.optim.Adam(params=self.parameters(), **optim_kwargs)
+        if list(self.parameters()):
+            optim_kwargs = {} if self.optim_kwargs is None else self.optim_kwargs
+            self.optimizer = torch.optim.Adam(params=self.parameters(), **optim_kwargs)
+        else:
+            self.optimizer = None  # For non-NN methods
 
         state = self.env.reset()
         reward = 0.
@@ -105,96 +106,23 @@ class Agent(nn.Module):
         loss.backward()
         self.optimizer.step()
 
+    def _find_legal_actions(self, state):
+        # Compatibility with torch tensors and numpy arrays
+        try:
+            state = state.numpy()
+        except:
+            pass
 
-class BatchedActorCriticAgent(Agent):
-    """
-    Simple actor-critic agent for discrete action spaces.
+        particles = [i for i, p in enumerate(state) if np.max(p) > 0]
 
-    The actor implements the policy pi(a|s). The critic estimates the state-action value q(s, a). The base A-C class does not yet implement any training algorithm.
-    """
+        actions = []
+        try:  # 1D-wrapped envs
+            for i, pi in enumerate(particles):
+                for j, pj in enumerate(particles[:i]):
+                    actions.append(self.env.wrap_action((pi, pj)))
+        except:
+            for i, pi in enumerate(particles):
+                for j, pj in enumerate(particles[:i]):
+                    actions.append((pi, pj))
 
-    def __init__(
-        self,
-        env,
-        legal_action_extractor=None,
-        gamma=0.99,
-        optim_kwargs=None,
-        history_length=None,
-        dtype=torch.float,
-        device=torch.device("cpu"),
-        hidden_sizes=(100, 100,),
-        activation=nn.ReLU(),
-        log_epsilon=-20.0,
-        *args,
-        **kwargs
-    ):
-        super().__init__(env, legal_action_extractor, gamma, optim_kwargs, history_length, dtype, device)
-
-        self.log_epsilon = log_epsilon
-        self.actor_critic = MultiHeadedMLP(1 + self.state_length, hidden_sizes=hidden_sizes, head_sizes=(1, 1), activation=activation, head_activations=(None, None),)
-        self.softmax = nn.Softmax(dim=0)
-
-    def _predict(self, state):
-        legal_actions = self._legal_action_extractor(state, self.env)
-        batch_states = self._batch_state(state, legal_actions)
-        log_probs, qs = self._evaluate_batch_states(batch_states)
-        action_id = self._act(log_probs, legal_actions)
-
-        return (
-            legal_actions[action_id],
-            {"legal_actions": legal_actions, "action_id": action_id, "log_probs": log_probs, "log_prob": log_probs[action_id], "values": qs, "value": qs[action_id]},
-        )
-
-    def _evaluate(self, states, legal_actions_list):
-        all_qs = []
-        all_log_probs = []
-
-        for state, legal_actions in zip(states, legal_actions_list):
-            batch_states = self._batch_state(state, legal_actions)
-            log_probs, qs = self._evaluate_batch_states(batch_states)
-            all_qs.append(qs.flatten().unsqueeze(0))
-            all_log_probs.append(log_probs.unsqueeze(0))
-
-        all_qs = torch.cat(all_qs, dim=0)
-        all_log_probs = torch.cat(all_log_probs, dim=0)
-
-        return all_log_probs, all_qs
-
-    def _update(self, state, reward, value, action, done, next_state, next_reward, num_episode, **kwargs):
-        raise NotImplementedError
-
-    def _batch_state(self, state, legal_actions):
-        state_ = state.view(-1)
-        batch_states = []
-        for action in legal_actions:
-            action_ = torch.tensor([action]).to(self.device, self.dtype)
-            batch_states.append(torch.cat((action_, state_), dim=0).unsqueeze(0))
-        batch_states = torch.cat(batch_states, dim=0)
-        return batch_states
-
-    def _evaluate_batch_states(self, batch_states, pad=True):
-        (probs, qs) = self.actor_critic(batch_states)
-        probs = self.softmax(probs).flatten()
-        qs = qs.flatten()
-        log_probs = torch.log(probs)
-
-        if pad:
-            qs = self._pad(qs, value=0.0)
-            log_probs = self._pad(log_probs)
-
-        return log_probs, qs
-
-    def _act(self, log_probs, legal_actions):
-        cat = Categorical(torch.exp(torch.clamp(log_probs, -20)))
-        action_id = len(legal_actions)
-        while action_id >= len(legal_actions):
-            try:
-                action_id = cat.sample()
-            except RuntimeError:  # Sometimes something weird happens here...
-                logger.error("Error sampling action! Log probabilities: %s", log_probs)
-        return action_id
-
-    def _pad(self, inputs, value=None):
-        return torch.nn.functional.pad(
-            inputs, (0, self.num_actions - inputs.size()[-1]), mode="constant", value=self.log_epsilon if value is None else value
-        )
+        return actions
