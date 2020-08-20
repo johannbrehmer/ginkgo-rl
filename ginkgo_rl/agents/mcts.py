@@ -5,18 +5,18 @@ import random
 import copy
 
 from .base import Agent
-from ..utils.normalization import ginkgo_reward_normalizer
+from ..utils.normalization import AffineNormalizer
 
 
 class MCTSNode:
-    def __init__(self, parent, path):
+    def __init__(self, parent, path, reward_normalizer=None, reward_min=0., reward_max=1.):
         self.parent = parent
         self.path = path
         self.children = OrderedDict()
+        self.reward_normalizer = AffineNormalizer(reward_min, reward_max) if reward_normalizer is None else reward_normalizer
+        self.terminal = None  # None means undetermined
 
-        self.terminal = False
-
-        self.q = 0  # Total reward
+        self.q = 0.0  # Total reward
         self.n = 0  # Total visit count
 
     def expand(self, actions):
@@ -26,7 +26,7 @@ class MCTSNode:
             if action in self.children:
                 continue
 
-            self.children[action] = MCTSNode(self, self.path + [action])
+            self.children[action] = MCTSNode(self, self.path + [action], self.reward_normalizer)
 
     def set_terminal(self, terminal):
         self.terminal = terminal
@@ -62,12 +62,13 @@ class MCTSNode:
         assert choice is not None
         return choice
 
-    def give_reward(self, reward, backpropagate=True):
+    def give_reward(self, reward, backup=True):
         self.q += reward
         self.n += 1
+        self.reward_normalizer.update(reward)
 
-        if backpropagate and self.parent:
-            self.parent.give_reward(reward, backpropagate=True)
+        if backup and self.parent:
+            self.parent.give_reward(reward, backup=True)
 
     def prune(self, update_q=0.):
         """ Steps into a subtree and updates all paths (and the new root's parent link) """
@@ -84,9 +85,9 @@ class MCTSNode:
         if policy_probs is None:  # By default assume a uniform policy
             policy_probs = 1. / len(self)
 
-        q_children = np.asarray([child.q for child in self.children.values()])
+        q_children = np.asarray([self.reward_normalizer.evaluate(child.q) for child in self.children.values()])
         n_children = np.asarray([child.n for child in self.children.values()])
-        mean_q_children = np.where(n_children > 0, q_children / n_children, self.q / self.n)
+        mean_q_children = np.where(n_children > 0, q_children / n_children, self.reward_normalizer.evaluate(self.q) / self.n)
 
         pucts = mean_q_children + c_puct * policy_probs * (self.n + 1.e-9) ** 0.5 / (1. + n_children)
 
@@ -101,7 +102,6 @@ class BaseMCAgent(Agent):
         self,
         n_mc=1000,
         c_puct=1.0,
-        reward_normalizer=None
         *args,
         **kwargs
     ):
@@ -109,8 +109,6 @@ class BaseMCAgent(Agent):
 
         self.n_mc = n_mc
         self.c_puct = c_puct
-        self.reward_normalizer=ginkgo_reward_normalizer if reward_normalizer is None else reward_normalizer
-
         self.mcts_head = self._init_mcts()
 
     def learn(self, total_timesteps):
@@ -143,8 +141,9 @@ class BaseMCAgent(Agent):
 
     def _parse_path(self, state, path):
         """ Given a path (list of actions), computes the resulting environment state and total reward """
-        # TODO: ensure that self.env always has current state, i.e. that state == self.env.state
 
+        # Ensure that self.env always has current state
+        assert np.isclose(state, self.env.state)
         env = copy.deepcopy(self.env)
 
         # Follow path
@@ -155,13 +154,14 @@ class BaseMCAgent(Agent):
 
         return state, total_reward
 
-    def _init_mcts(self):
+    @staticmethod
+    def _init_mcts():
         """ Initializes MCTS tree """
         return MCTSNode(None, [])
 
     def _check_if_path_terminates(self, initial_state, path):
         """ Given an initial state and a path (list of actions), check if the final state is terminal """
-        raise NotImplementedError
+        return len(path) >= len(self._legal_action_extractor(initial_state)) - 1
 
     def _mcts(self, state, n):
         """ Run Monte-Carl tree search from state for n trajectories"""
@@ -189,8 +189,8 @@ class BaseMCAgent(Agent):
                 if node.terminal is None:
                     node.set_terminal(self._check_if_path_is_terminal(state, node.path))
 
-            # Backpropagate
-            node.give_reward(total_reward, backpropagate=True)
+            # Backup
+            node.give_reward(total_reward, backup=True)
 
         # Select best action
         action = self.mcts_head.select_best()
