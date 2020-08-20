@@ -1,14 +1,18 @@
 from collections import OrderedDict
 import numpy as np
 import torch
+from torch import nn
 import random
 import copy
 
 from .base import Agent
 from ..utils.normalization import AffineNormalizer
+from ..utils.nets import MultiHeadedMLP
 
 
 class MCTSNode:
+    # TODO: temperature selection with probability ~ n(a)^(1/temperature)
+
     def __init__(self, parent, path, reward_normalizer=None, reward_min=0., reward_max=1.):
         self.parent = parent
         self.path = path
@@ -97,7 +101,7 @@ class MCTSNode:
         return len(self.children)
 
 
-class BaseMCAgent(Agent):
+class BaseMCTSAgent(Agent):
     def __init__(
         self,
         n_mc=1000,
@@ -124,8 +128,11 @@ class BaseMCAgent(Agent):
         action, info = self._mcts(n=self.n)
         return action, info
 
-    def _update(self, state, reward, value, action, done, next_state, next_reward, num_episode):
+    def _update(self, state, reward, value, action, done, next_state, next_reward, num_episode, **kwargs):
         """ Updates after environment reaction """
+
+        # Memorize step
+        self.history.store(log_prob=kwargs["log_prob"], reward=reward)
 
         # MCTS updates
         if done:
@@ -136,8 +143,15 @@ class BaseMCAgent(Agent):
             self.mcts_head = self.mcts_head.children[action]
             self.mcts_head.prune(update_q= - reward)  # This updates the node.path and node.q fields
 
-        # Policy training
-        raise NotImplementedError
+        # No further steps after each step
+        if not done or not self.training:
+            return
+
+        # Policy training (if necessary)
+        self._train()
+
+        # Reset memory for next episode
+        self.history.clear()
 
     def _parse_path(self, state, path):
         """ Given a path (list of actions), computes the resulting environment state and total reward """
@@ -194,10 +208,58 @@ class BaseMCAgent(Agent):
 
         # Select best action
         action = self.mcts_head.select_best()
-        info = {}
+        info = {"log_prob": self._evaluate_policy(state, self._legal_action_extractor(state), action=action)}
 
         return action, info
 
-    def _evaluate_policy(self, state, legal_actions):
-        """ Evaluates the policy on the state and returns the probabilities for each action """
+    def _evaluate_policy(self, state, legal_actions, action=None):
+        """ Evaluates the policy on the state and returns the probabilities for a given action or all legal actions """
         raise NotImplementedError
+
+    def _train(self):
+        """ Policy updates at end of episode """
+        raise NotImplementedError
+
+
+class RandomMCTSAgent(BaseMCTSAgent):
+    def _evaluate_policy(self, state, legal_actions, action=None):
+        """ Evaluates the policy on the state and returns the probabilities for a given action or all legal actions """
+        if action is not None:
+            1. / len(legal_actions)
+        else:
+            return 1. / len(legal_actions) * np.ones(len(legal_actions))
+
+    def _train(self):
+        pass
+
+
+class MCTSAgent(BaseMCTSAgent):
+    def __init__(self, hidden_sizes=(100,100,), activation=nn.ReLU, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        self.actor = MultiHeadedMLP(self.state_length + 1, hidden_sizes=hidden_sizes, head_sizes=(1,), activation=activation, head_activations=(None,))
+        self.softmax = nn.Softmax(dim=0)
+
+    def _evaluate_policy(self, state, legal_actions):
+        batch_states = []
+
+        for action in legal_actions:
+            action_ = torch.tensor([action]).to(self.device, self.dtype)
+            batch_states.append(torch.cat((action_, state), dim=0).unsqueeze(0))
+
+        batch_states = torch.cat(batch_states, dim=0)
+
+        (probs,) = self.actor(batch_states)
+        probs = self.softmax(probs).flatten()
+        return probs
+
+    def _train(self):
+        # Roll out last episode
+        rollout = self.history.rollout()
+        log_probs = torch.stack(rollout["log_prob"], dim=0)
+
+        # Compute loss: train policy to get closer to (deterministic) MCS choice
+        loss = -torch.sum(log_probs)
+
+        # Gradient update
+        self._gradient_step(loss)
