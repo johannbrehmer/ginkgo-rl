@@ -1,12 +1,9 @@
 import numpy as np
 import torch
 from torch import nn
-from torch.distributions import Categorical
 import logging
 from tqdm import trange
 
-from ..utils.nets import MultiHeadedMLP
-from ..utils.legal_actions import ginkgo1d_legal_action_extractor
 from ..utils.replay_buffer import History
 
 logger = logging.getLogger(__name__)
@@ -30,6 +27,9 @@ class Agent(nn.Module):
 
         super().__init__()
 
+    def set_env(self, env):
+        self.env = env
+
     def learn(self, total_timesteps):
         # Prepare training
         self.train()
@@ -48,7 +48,7 @@ class Agent(nn.Module):
             action, agent_info = self.predict(state)
             next_state, next_reward, done, info = self.env.step(action)
 
-            self._update(
+            self.update(
                 state=self._tensorize(state),
                 reward=reward,
                 action=action,
@@ -89,17 +89,19 @@ class Agent(nn.Module):
         state = self._tensorize(state)
         return self._predict(state)
 
-    def _init_replay_buffer(self, history_length):
-        self.history = History(max_length=history_length, dtype=self.dtype, device=self.device)
-
-    def _update(self, state, reward, action, done, next_state, next_reward, num_episode, **kwargs):
+    def update(self, state, reward, action, done, next_state, next_reward, num_episode, **kwargs):
         """
         Is called at the end of each step, gives the agent the chance to a) update the replay buffer and b) learn its weights.
         """
         raise NotImplementedError
 
+    def _init_replay_buffer(self, history_length):
+        self.history = History(max_length=history_length, dtype=self.dtype, device=self.device)
+
     def _tensorize(self, array):
-        return torch.tensor(array).to(self.device, self.dtype)
+        tensor = array if isinstance(array, torch.Tensor) else torch.tensor(array)
+        tensor = tensor.to(self.device, self.dtype)
+        return tensor
 
     def _gradient_step(self, loss):
         self.optimizer.zero_grad()

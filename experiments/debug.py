@@ -7,6 +7,7 @@ import logging
 sys.path.append("../")
 from ginkgo_rl import GinkgoLikelihood1DEnv
 from ginkgo_rl import RandomMCTSAgent, MCTSAgent
+from ginkgo_rl import GinkgoEvaluator
 
 
 # Logging setup
@@ -23,5 +24,8 @@ for key in logging.Logger.manager.loggerDict:
 
 env = GinkgoLikelihood1DEnv()
 
-model = MCTSAgent(env)
+model = MCTSAgent(env, n_mc_target=50, n_mc_min=1)
 model.learn(total_timesteps=10)
+
+evaluator = GinkgoEvaluator(n_jets=2)
+evaluator.eval("MCTS", model, "GinkgoLikelihood1D-v0")

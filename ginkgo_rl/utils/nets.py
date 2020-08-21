@@ -104,14 +104,14 @@ class MultiHeadedMLP(nn.Module):
         super().__init__()
         # print(hidden_sizes)
         if linear != nn.Linear:
-            logger.info(f"Creating noisy network with init sigma {init_sigma}")
+            logger.debug(f"Creating noisy network with init sigma {init_sigma}")
             linear = partial(
                 linear, sigma_init=init_sigma
             )  # partial takes care of the inital noise param, cleans up rest of the code, by avoiding if/else all over
 
         layers = [linear(input_size, hidden_sizes[0]), activation]
         for last_hidden, hidden in zip(hidden_sizes[:-1], hidden_sizes[1:]):
-            logger.info(f"Creating Linear layer: {last_hidden}->{hidden}")
+            logger.info(f"Creating linear layer: {last_hidden}->{hidden}")
             l = linear(last_hidden, hidden)
             layers.append(l)
             layers.append(activation)
@@ -119,7 +119,7 @@ class MultiHeadedMLP(nn.Module):
 
         self.head_nets = nn.ModuleList()
         for head_size, head_activation in zip(head_sizes, head_activations):
-            logger.info(f"Creating Linear head layer: {hidden_sizes[-1]}->{head_size}")
+            logger.info(f"Creating linear head layer: {hidden_sizes[-1]}->{head_size}")
             layers = [linear(hidden_sizes[-1], head_size)]
 
             if head_activation is not None:

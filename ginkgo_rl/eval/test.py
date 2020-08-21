@@ -118,17 +118,33 @@ class GinkgoEvaluator():
         done = False
         log_likelihood = 0.
         errors = 0
+        reward = 0.0
+
+        # Point model to correct env: this only works for *our* models, not the baselines
+        try:
+            model.set_env(env)
+        except:
+            pass
 
         while not done:
             if model is None:
                 action = env.action_space.sample()
+                agent_info = {}
             else:
-                action, _ = model.predict(state)
-            state, reward, done, info = env.step(action)
+                action, agent_info = model.predict(state)
+            next_state, next_reward, done, info = env.step(action)
 
             log_likelihood += reward
             if not info["legal"]:
                 errors += 1
+
+            # Update model: this only works for *our* models, not the baselines
+            try:
+                model.update(state, reward, action, done, next_state, next_reward=reward, num_episode=0, **agent_info)
+            except:
+                pass
+
+            reward, state = next_reward, next_state
 
         return log_likelihood, errors
 
