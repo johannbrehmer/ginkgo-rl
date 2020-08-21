@@ -1,5 +1,4 @@
 from collections import OrderedDict
-import numpy as np
 import torch
 from torch import nn
 import random
@@ -89,16 +88,15 @@ class MCTSNode:
         if backup and self.parent:
             self.parent.give_reward(reward, backup=True)
 
-    def prune(self, update_q=0.):
+    def prune(self):
         """ Steps into a subtree and updates all paths (and the new root's parent link) """
         self.path = self.path[1:]
-        self.q += update_q
 
         if len(self.path) == 0:
             self.parent = None
 
         for child in self.children.values():
-            child.prune(update_q=update_q)
+            child.prune()
 
     def _compute_pucts(self, policy_probs=None, c_puct=1.0):
         if policy_probs is None:  # By default assume a uniform policy
@@ -124,7 +122,7 @@ class BaseMCTSAgent(Agent):
     def __init__(
         self,
         *args,
-        n_mc_target=100,
+        n_mc_target=200,
         n_mc_min=10,
         c_puct=1.0,
         reward_range=(-200., 0.),
@@ -140,7 +138,7 @@ class BaseMCTSAgent(Agent):
         self.sim_env = copy.deepcopy(self.env)
         self.verbose = verbose
 
-        self._init_mcts()
+        self._init_episode()
 
     def set_env(self, env):
         self.env = env
@@ -158,14 +156,17 @@ class BaseMCTSAgent(Agent):
     def update(self, state, reward, action, done, next_state, next_reward, num_episode, **kwargs):
         """ Updates after environment reaction """
 
+        # Keep track of total reward
+        self.episode_reward += next_reward
+
         # MCTS updates
         if done:
             # Reset MCTS when done with an episode
-            self._init_mcts()
+            self._init_episode()
         else:
             # Update MCTS tree when deciding on an action
             self.mcts_head = self.mcts_head.children[action]
-            self.mcts_head.prune(update_q= - reward)  # This updates the node.path and node.q fields
+            self.mcts_head.prune()  # This updates the node.path
 
         # Memorize step
         if self.training:
@@ -186,7 +187,7 @@ class BaseMCTSAgent(Agent):
         self.sim_env.verbose = False
 
         # Follow path
-        total_reward = 0.
+        total_reward = 0.0
         terminal = False
 
         for action in path:
@@ -200,9 +201,10 @@ class BaseMCTSAgent(Agent):
         state = self._tensorize(state)
         return state, total_reward, terminal
 
-    def _init_mcts(self):
-        """ Initializes MCTS tree """
+    def _init_episode(self):
+        """ Initializes MCTS tree and total reward so far """
         self.mcts_head = MCTSNode(None, [], reward_min=self.reward_range[0], reward_max=self.reward_range[1])
+        self.episode_reward = 0.0
 
     def _mcts(self, state, max_steps=1000):
         """ Run Monte-Carl tree search from state for n trajectories"""
@@ -216,14 +218,15 @@ class BaseMCTSAgent(Agent):
         for i in range(n):
             if self.verbose: logger.debug(f"Initializing MCTS trajectory {i+1} / {n}")
             node = self.mcts_head
-            total_reward = 0.0
+            total_reward = self.episode_reward
 
             for _ in range(max_steps):
+                # Parse current state
                 this_state, total_reward, terminal = self._parse_path(state, node.path)
+                node.set_terminal(terminal)
                 if self.verbose: logger.debug(f"  Node {node.path}")
 
-                # Check termination
-                node.set_terminal(terminal)
+                # Termination
                 if terminal:
                     if self.verbose: logger.debug(f"  Node is terminal")
                     break
@@ -232,8 +235,7 @@ class BaseMCTSAgent(Agent):
                 if not node.children:
                     actions = self._find_legal_actions(this_state)
                     if not actions:
-                        logger.warning("Could not find legal actions!")
-                        terminal = True
+                        logger.warning("Could not find legal actions! Treating state as terminal.")
                         break
 
                     if self.verbose: logger.debug(f"    Expanding: {len(actions)} legal actions")
@@ -246,8 +248,7 @@ class BaseMCTSAgent(Agent):
                 node = node.children[action]
 
             # Backup
-            if self.verbose: logger.debug(f"  Computing reward: {total_reward}")
-            if self.verbose: logger.debug(f"  Backing up")
+            if self.verbose: logger.debug(f"  Backing up total reward of {total_reward}")
             node.give_reward(total_reward, backup=True)
 
         # Select best action
