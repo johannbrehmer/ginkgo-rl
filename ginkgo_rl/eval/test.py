@@ -137,7 +137,7 @@ class GinkgoEvaluator():
                 action, agent_info = model.predict(state)
             next_state, next_reward, done, info = env.step(action)
 
-            log_likelihood += reward
+            log_likelihood += next_reward
             if not info["legal"]:
                 errors += 1
 

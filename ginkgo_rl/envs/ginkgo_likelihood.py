@@ -234,9 +234,10 @@ class GinkgoLikelihoodEnv(Env):
         return self._check_acceptability(action) and i != j and i < self.n and j < self.n
 
     def _sort_state(self):
-        idx = sorted(list(range(self.n_max)), reverse=True, key=lambda i : self.state[i, 0])
-        self.state = self.state[idx, :]
-        self.is_leaf = np.asarray(self.is_leaf, dtype=np.bool)[idx]
+        pass
+        # idx = sorted(list(range(self.n_max)), reverse=True, key=lambda i : self.state[i, 0])
+        # self.state = self.state[idx, :]
+        # self.is_leaf = np.asarray(self.is_leaf, dtype=np.bool)[idx]
 
     def _compute_log_likelihood(self, action):
         """ Compute log likelihood of the splitting (i + j) -> i, j, where i, j is the current action """
