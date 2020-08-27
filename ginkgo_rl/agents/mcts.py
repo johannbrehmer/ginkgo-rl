@@ -122,8 +122,9 @@ class BaseMCTSAgent(Agent):
     def __init__(
         self,
         *args,
-        n_mc_target=10,
-        n_mc_min=10,
+        n_mc_target=5,
+        n_mc_min=5,
+        n_mc_max=100,
         c_puct=1.0,
         reward_range=(-200., 0.),
         verbose=False,
@@ -133,6 +134,7 @@ class BaseMCTSAgent(Agent):
 
         self.n_mc_target = n_mc_target
         self.n_mc_min = n_mc_min
+        self.n_mc_max = n_mc_max
         self.c_puct = c_puct
         self.reward_range = reward_range
         self.sim_env = copy.deepcopy(self.env)
@@ -213,7 +215,7 @@ class BaseMCTSAgent(Agent):
             n = 1
         else:
             n_initial_legal_actions = len(self._find_legal_actions(state))
-            n = max(self.n_mc_target * n_initial_legal_actions - self.mcts_head.n, self.n_mc_min)
+            n = min(max(self.n_mc_target * n_initial_legal_actions - self.mcts_head.n, self.n_mc_min), self.n_mc_max)
         logger.debug(f"Starting MCTS with {n} trajectories")
 
         for i in range(n):
