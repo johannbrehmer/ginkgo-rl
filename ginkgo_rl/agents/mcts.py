@@ -4,6 +4,7 @@ from torch import nn
 import random
 import copy
 import logging
+import numpy as np
 
 from .base import Agent
 from ..utils.normalization import AffineNormalizer
@@ -19,6 +20,8 @@ class MCTSNode:
         self.parent = parent
         self.path = path
         self.children = OrderedDict()
+        self.reward_min = reward_min
+        self.reward_max = reward_max
         self.reward_normalizer = AffineNormalizer(hard_min=reward_min, hard_max=reward_max) if reward_normalizer is None else reward_normalizer
         self.terminal = None  # None means undetermined
 
@@ -41,7 +44,7 @@ class MCTSNode:
             if action in self.children:
                 continue
 
-            self.children[action] = MCTSNode(self, self.path + [action], self.reward_normalizer)
+            self.children[action] = MCTSNode(self, self.path + [action], self.reward_normalizer, reward_min=self.reward_min, reward_max=self.reward_max)
 
     def set_terminal(self, terminal):
         self.terminal = terminal
@@ -81,6 +84,8 @@ class MCTSNode:
         return choice
 
     def give_reward(self, reward, backup=True):
+        reward = np.clip(reward, self.reward_min, self.reward_max)
+
         self.q += reward
         self.n += 1
         self.reward_normalizer.update(reward)
@@ -137,21 +142,19 @@ class BaseMCTSAgent(Agent):
         self.n_mc_max = n_mc_max
         self.c_puct = c_puct
         self.reward_range = reward_range
-        self.sim_env = copy.deepcopy(self.env)
         self.verbose = verbose
+
+        self.sim_env = copy.deepcopy(self.env)
+        self.sim_env.reset_at_episode_end = False  # Avoids expensive re-sampling of jets every time we parse a path
 
         self._init_episode()
 
     def set_env(self, env):
         self.env = env
         self.sim_env = copy.deepcopy(self.env)
+        self.sim_env.reset_at_episode_end = False  # Avoids expensive re-sampling of jets every time we parse a path
 
     def _predict(self, state):
-        # If there is only one action, don't bother with MCTS
-        actions = self._find_legal_actions(state)
-        assert actions
-
-        # Run MCTS
         action, info = self._mcts(state)
         return action, info
 

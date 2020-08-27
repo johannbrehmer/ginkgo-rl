@@ -6,7 +6,7 @@ from torch import nn
 import logging
 from functools import partial
 
-logger = logging.getLogger(__file__)
+logger = logging.getLogger(__name__)
 
 # from https://github.com/Shmuma/ptan/blob/master/samples/rainbow/lib/dqn_model.py
 class NoisyLinear(nn.Linear):
@@ -111,7 +111,7 @@ class MultiHeadedMLP(nn.Module):
 
         layers = [linear(input_size, hidden_sizes[0]), activation]
         for last_hidden, hidden in zip(hidden_sizes[:-1], hidden_sizes[1:]):
-            logger.info(f"Creating linear layer: {last_hidden}->{hidden}")
+            logger.debug(f"Creating linear layer: {last_hidden}->{hidden}")
             l = linear(last_hidden, hidden)
             layers.append(l)
             layers.append(activation)
@@ -119,7 +119,7 @@ class MultiHeadedMLP(nn.Module):
 
         self.head_nets = nn.ModuleList()
         for head_size, head_activation in zip(head_sizes, head_activations):
-            logger.info(f"Creating linear head layer: {hidden_sizes[-1]}->{head_size}")
+            logger.debug(f"Creating linear head layer: {hidden_sizes[-1]}->{head_size}")
             layers = [linear(hidden_sizes[-1], head_size)]
 
             if head_activation is not None:

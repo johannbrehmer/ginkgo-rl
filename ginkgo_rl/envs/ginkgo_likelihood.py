@@ -55,6 +55,7 @@ class GinkgoLikelihoodEnv(Env):
         jet_momentum=400.0,
         jetdir=(1, 1, 1),
         verbose=True,
+        reset_at_episode_end=True,
     ):
         super().__init__()
 
@@ -72,6 +73,7 @@ class GinkgoLikelihoodEnv(Env):
         self.state_rescaling = state_rescaling
         self.padding_value = padding_value
         self.verbose = verbose
+        self.reset_at_episode_end = reset_at_episode_end
 
         # Simulator settings
         self.n_min = n_min
@@ -180,7 +182,8 @@ class GinkgoLikelihoodEnv(Env):
         if done:
             if self.verbose:
                 logger.debug("Episode is done.")
-            self._simulate()
+            if self.reset_at_episode_end:
+                self._simulate()
 
         return self.state, reward, done, info
 
