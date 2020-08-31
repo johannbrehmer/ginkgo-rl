@@ -53,7 +53,7 @@ class GinkgoEvaluator():
         for method in self.methods:
             yield method, self.log_likelihoods[method], self.illegal_actions[method]
 
-    def plot_log_likelihoods(self, cols=2, rows=4, ymax=0.25, deltax_min=5., deltax_max=40., xbins=25, panelsize=4.):
+    def plot_log_likelihoods(self, cols=2, rows=4, ymax=0.25, deltax_min=5., deltax_max=20., xbins=50, panelsize=4.):
         colors = [f"C{i}" for i in range(20)]
         fig = plt.figure(figsize=(rows*panelsize, cols*panelsize))
 

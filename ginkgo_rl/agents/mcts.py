@@ -26,16 +26,8 @@ class MCTSNode:
         self.terminal = None  # None means undetermined
 
         self.q = 0.0  # Total reward
+        self.q_max = reward_min if reward_min is not None else -float("inf")  # Highest reward encountered in this node
         self.n = 0  # Total visit count
-
-    def get_nmq(self):
-        """ Returns normalized mean reward """
-        if self.n > 0:
-            return self.reward_normalizer.evaluate(self.q / self.n)
-        elif self.parent is not None:
-            return self.parent.get_nmq()
-        else:
-            return 0.5
 
     def expand(self, actions):
         self.terminal = False
@@ -49,14 +41,39 @@ class MCTSNode:
     def set_terminal(self, terminal):
         self.terminal = terminal
 
+    def give_reward(self, reward, backup=True):
+        reward = np.clip(reward, self.reward_min, self.reward_max)
+
+        self.q_max = max(self.q_max, reward)
+        self.q += reward
+        self.n += 1
+        self.reward_normalizer.update(reward)
+
+        if backup and self.parent:
+            self.parent.give_reward(reward, backup=True)
+
+    def get_reward(self, mode="mean"):
+        """ Returns normalized mean reward (for `mode=="mean"`) or best reward (for `mode=="max"`) """
+        assert mode in ["mean", "max"]
+
+        if mode == "max":
+            return self.reward_normalizer.evaluate(self.q_max)
+
+        if self.n > 0:
+            return self.reward_normalizer.evaluate(self.q / self.n)
+        elif self.parent is not None:
+            return self.parent.get_reward()
+        else:
+            return 0.5
+
     def select_random(self):
         assert self.children and not self.terminal
         return random.choice(list(self.children.keys()))
 
-    def select_puct(self, policy_probs=None, c_puct=1.0):
+    def select_puct(self, policy_probs=None, mode="mean", c_puct=1.0):
         assert self.children and not self.terminal
 
-        pucts = self._compute_pucts(policy_probs, c_puct=c_puct)
+        pucts = self._compute_pucts(policy_probs, mode=mode, c_puct=c_puct)
         assert len(pucts) > 0
 
         # Pick highest
@@ -70,12 +87,12 @@ class MCTSNode:
         assert choice is not None
         return list(self.children.keys())[choice]
 
-    def select_best(self):
+    def select_best(self, mode="max"):
         best_q = - float("inf")
         choice = None
 
         for action, child in self.children.items():
-            q = child.get_nmq()
+            q = child.get_reward(mode=mode)
             if q > best_q:
                 best_q = q
                 choice = action
@@ -83,38 +100,27 @@ class MCTSNode:
         assert choice is not None
         return choice
 
-    def give_reward(self, reward, backup=True):
-        reward = np.clip(reward, self.reward_min, self.reward_max)
-
-        self.q += reward
-        self.n += 1
-        self.reward_normalizer.update(reward)
-
-        if backup and self.parent:
-            self.parent.give_reward(reward, backup=True)
-
     def prune(self):
         """ Steps into a subtree and updates all paths (and the new root's parent link) """
         self.path = self.path[1:]
-
         if len(self.path) == 0:
             self.parent = None
 
         for child in self.children.values():
             child.prune()
 
-    def _compute_pucts(self, policy_probs=None, c_puct=1.0):
+    def _compute_pucts(self, policy_probs=None, mode="mean", c_puct=1.0):
         if policy_probs is None:  # By default assume a uniform policy
             policy_probs = 1. / len(self)
 
         assert len(policy_probs) == len(self) > 0
 
         n_children = torch.tensor([child.n for child in self.children.values()], dtype=policy_probs.dtype)
-        nmq_children = torch.tensor([child.get_nmq() for child in self.children.values()], dtype=policy_probs.dtype)
-        pucts = nmq_children + c_puct * policy_probs * (self.n + 1.e-9) ** 0.5 / (1. + n_children)
+        q_children = torch.tensor([child.get_reward(mode=mode) for child in self.children.values()], dtype=policy_probs.dtype)
+        pucts = q_children + c_puct * policy_probs * (self.n + 1.e-9) ** 0.5 / (1. + n_children)
 
         assert len(n_children) == len(self) > 0
-        assert len(nmq_children) == len(self) > 0
+        assert len(q_children) == len(self) > 0
         assert len(pucts) == len(self) > 0
 
         return pucts
@@ -130,6 +136,7 @@ class BaseMCTSAgent(Agent):
         n_mc_target=5,
         n_mc_min=5,
         n_mc_max=100,
+        mcts_mode="mean",
         c_puct=1.0,
         reward_range=(-200., 0.),
         verbose=False,
@@ -143,6 +150,7 @@ class BaseMCTSAgent(Agent):
         self.c_puct = c_puct
         self.reward_range = reward_range
         self.verbose = verbose
+        self.mcts_mode=mcts_mode
 
         self.sim_env = copy.deepcopy(self.env)
         self.sim_env.reset_at_episode_end = False  # Avoids expensive re-sampling of jets every time we parse a path
@@ -249,7 +257,7 @@ class BaseMCTSAgent(Agent):
 
                 # Select
                 policy_probs = self._evaluate_policy(this_state, node.children.keys())
-                action = node.select_puct(policy_probs, self.c_puct)
+                action = node.select_puct(policy_probs, mode=self.mcts_mode, c_puct=self.c_puct)
                 if self.verbose: logger.debug(f"    Selecting action {action}")
                 node = node.children[action]
 
@@ -258,7 +266,7 @@ class BaseMCTSAgent(Agent):
             node.give_reward(total_reward, backup=True)
 
         # Select best action
-        action = self.mcts_head.select_best()
+        action = self.mcts_head.select_best(mode="max")
         info = {"log_prob": torch.log(self._evaluate_policy(state, self._find_legal_actions(state), action=action))}
 
         # Debug output
@@ -271,7 +279,7 @@ class BaseMCTSAgent(Agent):
                 f"p = {probs_[i].detach().item():.2f}, "
                 f"n = {node_.n:>3d}, "
                 f"q = {node_.q / (node_.n + 1.e-9):>5.1f}, "
-                f"nmq = {node_.get_nmq():>4.2f}"
+                f"nmq = {node_.get_reward():>4.2f}"
             )
 
         return action, info
