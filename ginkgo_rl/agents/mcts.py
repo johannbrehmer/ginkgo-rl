@@ -161,12 +161,16 @@ class BaseMCTSAgent(Agent):
         self._init_episode()
 
     def set_env(self, env):
+        """ Sets current environment (and initializes episode) """
+
         self.env = env
         self.sim_env = copy.deepcopy(self.env)
         self.sim_env.reset_at_episode_end = False  # Avoids expensive re-sampling of jets every time we parse a path
         self._init_episode()
 
     def set_precision(self, n_mc_target, n_mc_min, n_mc_max, mcts_mode, c_puct):
+        """ Sets / changes MCTS precision parameters """
+
         self.n_mc_target = n_mc_target
         self.n_mc_min = n_mc_min
         self.n_mc_max = n_mc_max
@@ -227,6 +231,7 @@ class BaseMCTSAgent(Agent):
 
     def _init_episode(self):
         """ Initializes MCTS tree and total reward so far """
+
         self.mcts_head = MCTSNode(None, [], reward_min=self.reward_range[0], reward_max=self.reward_range[1])
         self.episode_reward = 0.0
 
@@ -317,9 +322,12 @@ class RandomMCTSAgent(BaseMCTSAgent):
 
 
 class MCTSAgent(BaseMCTSAgent):
-    def __init__(self, *args, hidden_sizes=(100,100,), activation=nn.ReLU(), **kwargs):
+    def __init__(self, *args, log_likelihood_feature=True, hidden_sizes=(100,100,), activation=nn.ReLU(), **kwargs):
         super().__init__(*args, **kwargs)
-        self.actor = MultiHeadedMLP(1 + self.state_length, hidden_sizes=hidden_sizes, head_sizes=(1,), activation=activation, head_activations=(None,))
+
+        self.log_likelihood_feature = log_likelihood_feature
+
+        self.actor = MultiHeadedMLP(1 + int(self.log_likelihood_feature) + self.state_length, hidden_sizes=hidden_sizes, head_sizes=(1,), activation=activation, head_activations=(None,))
         self.softmax = nn.Softmax(dim=0)
 
     def _evaluate_policy(self, state, legal_actions, action=None):
@@ -335,10 +343,18 @@ class MCTSAgent(BaseMCTSAgent):
 
     def _batch_state(self, state, legal_actions):
         state_ = state.view(-1)
+
         batch_states = []
         for action in legal_actions:
             action_ = torch.tensor([action]).to(self.device, self.dtype)
-            batch_states.append(torch.cat((action_, state_), dim=0).unsqueeze(0))
+
+            if self.log_likelihood_feature:
+                _, log_likelihood, _ = self._parse_path(state, [action])
+                log_likelihood_ = torch.tensor([log_likelihood]).to(self.device, self.dtype)
+                batch_states.append(torch.cat((action_, log_likelihood_, state_), dim=0).unsqueeze(0))
+            else:
+                batch_states.append(torch.cat((action_, state_), dim=0).unsqueeze(0))
+
         batch_states = torch.cat(batch_states, dim=0)
         return batch_states
 

@@ -85,7 +85,7 @@ class GinkgoEvaluator():
 
         lines.append("-"*(lengths[0] + lengths[1] + lengths[2] + (3-1)*3))
         lines.append("")
-        
+
         return "\n".join(lines)
 
     def plot_log_likelihoods(self, cols=2, rows=4, ymax=0.5, deltax_min=5., deltax_max=20., xbins=25, panelsize=4., filename=None):

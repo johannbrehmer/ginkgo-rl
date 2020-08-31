@@ -50,6 +50,8 @@ def agent_config():
     reward_range = (-200., 0.)
     optim_kwargs = None
     history_length = None
+    hidden_sizes = (100, 100,)
+    activation = torch.nn.ReLU()
 
 
 # noinspection PyUnusedLocal
