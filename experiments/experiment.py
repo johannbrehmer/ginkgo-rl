@@ -7,7 +7,7 @@ import os
 import numpy as np
 
 sys.path.append("../")
-from experiments.config import ex, config, env_config, agent_config, train_config, technical_config
+from experiments.config import ex, config, env_config, agent_config, train_config, technical_config, baseline_config
 from ginkgo_rl import GinkgoLikelihood1DEnv, GinkgoLikelihoodEnv
 from ginkgo_rl import MCTSAgent, GreedyAgent, RandomAgent
 from ginkgo_rl import GinkgoEvaluator
@@ -129,6 +129,8 @@ def create_agent(
         agent = GreedyAgent(env, device=device, dtype=dtype)
     elif algorithm == "random":
         agent = RandomAgent(env, device=device, dtype=dtype)
+    elif algorithm in ["truth", "mle", "beamsearch"]:
+        agent = None
     else:
         raise ValueError(algorithm)
 
@@ -137,7 +139,7 @@ def create_agent(
 
 @ex.capture
 def train(env, agent, algorithm, train_n_mc_target, train_n_mc_min, train_n_mc_max, train_mcts_mode, train_c_puct, train_steps):
-    if algorithm in ["greedy", "random"]:
+    if algorithm in ["greedy", "random", "truth", "mle", "beamsearch"]:
         logger.info(f"No training necessary for algorithm {algorithm}")
 
     else:
@@ -157,21 +159,40 @@ def train(env, agent, algorithm, train_n_mc_target, train_n_mc_min, train_n_mc_m
 
 
 @ex.capture
-def eval(agent, name, algorithm, env_type, eval_n_mc_target, eval_n_mc_min, eval_n_mc_max, eval_mcts_mode, eval_c_puct, eval_repeats, eval_jets, eval_filename, eval_figure_path, redraw_eval_jets):
+def eval(agent, name, algorithm, env_type, eval_n_mc_target, eval_n_mc_min, eval_n_mc_max, eval_mcts_mode, eval_c_puct, eval_repeats, eval_jets, eval_filename, eval_figure_path, redraw_eval_jets, beamsize):
+    # Set up evaluator
     logger.info("Starting evaluation")
     os.makedirs(os.path.dirname(eval_filename), exist_ok=True)
     os.makedirs(eval_figure_path, exist_ok=True)
-    evaluator = GinkgoEvaluator(filename=eval_filename, n_jets=eval_jets, redraw_existing_jets=redraw_eval_jets, auto_eval_truth_mle=True)
+    evaluator = GinkgoEvaluator(filename=eval_filename, n_jets=eval_jets, redraw_existing_jets=redraw_eval_jets)
 
-    try:
-        agent.set_precision(eval_n_mc_target, eval_n_mc_min, eval_n_mc_max, eval_mcts_mode, eval_c_puct)
-    except:
-        pass
+    # Evaluate
+    if algorithm == "mcts":
+        try:
+            agent.set_precision(eval_n_mc_target, eval_n_mc_min, eval_n_mc_max, eval_mcts_mode, eval_c_puct)
+        except:
+            pass
+        env_name = "GinkgoLikelihood1D-v0" if env_type=="1d" else "GinkgoLikelihood-v0"
+        evaluator.eval(name, agent, env_name=env_name, n_repeats=eval_repeats)
 
-    env_name = "GinkgoLikelihood1D-v0" if env_type=="1d" else "GinkgoLikelihood-v0"
-    n_repeats = 1 if algorithm in ["greedy"] else eval_repeats
-    evaluator.eval(name, agent, env_name=env_name, n_repeats=n_repeats)
+    elif algorithm == "random":
+        env_name = "GinkgoLikelihood1D-v0" if env_type=="1d" else "GinkgoLikelihood-v0"
+        evaluator.eval(name, agent, env_name=env_name, n_repeats=eval_repeats)
 
+    elif algorithm == "greedy":
+        env_name = "GinkgoLikelihood1D-v0" if env_type=="1d" else "GinkgoLikelihood-v0"
+        evaluator.eval(name, agent, env_name=env_name, n_repeats=1)
+
+    elif algorithm == "beamsearch":
+        evaluator.eval_beam_search(name, beam_size=beamsize)
+
+    elif algorithm == "truth":
+        evaluator.eval_true("Truth")
+
+    elif algorithm == "mle":
+        evaluator.eval_exact_trellis("MLE (Trellis)")
+
+    # Print and plot results
     logger.info("Results:")
     print(evaluator)
     evaluator.plot_log_likelihoods(filename=f"{eval_figure_path}/{name}.pdf")
@@ -179,10 +200,11 @@ def eval(agent, name, algorithm, env_type, eval_n_mc_target, eval_n_mc_min, eval
 
 @ex.capture
 def save_agent(agent, run_name):
-    filename = f"./data/runs/{run_name}/model.pty"
-    logger.info(f"Saving model at {filename}")
-    torch.save(agent.state_dict(), filename)
-    ex.add_artifact(filename)
+    if agent is not None:
+        filename = f"./data/runs/{run_name}/model.pty"
+        logger.info(f"Saving model at {filename}")
+        torch.save(agent.state_dict(), filename)
+        ex.add_artifact(filename)
 
 
 @ex.automain

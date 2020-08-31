@@ -12,9 +12,12 @@ from ginkgo_rl import GinkgoLikelihoodEnv, GinkgoLikelihoodShuffled1DEnv, Ginkgo
 sys.path.append("/Users/johannbrehmer/work/projects/shower_rl/hierarchical-trellis/src")
 from run_physics_experiment_invM import compare_map_gt_and_bs_trees as compute_trellis
 
+sys.path.insert(0, "/Users/johannbrehmer/work/projects/shower_rl/ReclusterTreeAlgorithms/scripts")
+import beamSearchOptimal_invM as beam_search
+
 
 class GinkgoEvaluator():
-    def __init__(self, filename, redraw_existing_jets=False, n_jets=8, auto_eval_truth_mle=True):
+    def __init__(self, filename, redraw_existing_jets=False, n_jets=8, auto_eval_truth_mle=False):
         self.filename = filename
 
         if os.path.exists(filename) and not redraw_existing_jets:
@@ -38,6 +41,11 @@ class GinkgoEvaluator():
 
     def eval_exact_trellis(self, method):
         log_likelihoods = [[self._compute_maximum_log_likelihood(jet)] for jet in self.jets]
+        illegal_actions = [[0] for _ in self.jets]
+        self._update_results(method, log_likelihoods, illegal_actions)
+
+    def eval_beam_search(self, method, beam_size):
+        log_likelihoods = [[self._compute_beam_search_log_likelihood(jet, beam_size)] for jet in self.jets]
         illegal_actions = [[0] for _ in self.jets]
         self._update_results(method, log_likelihoods, illegal_actions)
 
@@ -225,3 +233,16 @@ class GinkgoEvaluator():
         """ Based on Sebastian's code at https://github.com/iesl/hierarchical-trellis/blob/sebastian/src/Jet_Experiments_invM_exactTrellis.ipynb """
         _, _, max_log_likelihood, _, _ = compute_trellis(jet[0])
         return max_log_likelihood
+
+    @staticmethod
+    def _compute_beam_search_log_likelihood(jet, beam_size):
+        n = len(jet[0]["leaves"])
+        bs_jet = beam_search.recluster(
+            jet[0],
+            beamSize=min(beam_size, n * (n - 1) // 2),
+            delta_min=jet[0]["pt_cut"],
+            lam=float(jet[0]["Lambda"]),
+            N_best=1,
+            visualize=True,  # TODO: figure out why this is necessary
+        )[0]
+        return sum(bs_jet["logLH"])

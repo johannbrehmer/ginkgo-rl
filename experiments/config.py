@@ -87,6 +87,12 @@ def eval_config():
 
 # noinspection PyUnusedLocal
 @ex.config
+def baseline_config():
+    beamsize=10
+
+
+# noinspection PyUnusedLocal
+@ex.config
 def technical_config():
     device = torch.device("cpu")
     dtype = torch.float
