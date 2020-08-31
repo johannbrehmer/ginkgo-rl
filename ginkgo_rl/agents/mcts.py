@@ -26,7 +26,7 @@ class MCTSNode:
         self.terminal = None  # None means undetermined
 
         self.q = 0.0  # Total reward
-        self.q_max = reward_min if reward_min is not None else -float("inf")  # Highest reward encountered in this node
+        self.q_max = -float("inf")  # Highest reward encountered in this node
         self.n = 0  # Total visit count
 
     def expand(self, actions):
@@ -57,14 +57,17 @@ class MCTSNode:
         assert mode in ["mean", "max"]
 
         if mode == "max":
-            return self.reward_normalizer.evaluate(self.q_max)
-
-        if self.n > 0:
-            return self.reward_normalizer.evaluate(self.q / self.n)
-        elif self.parent is not None:
-            return self.parent.get_reward()
+            try:
+                return self.reward_normalizer.evaluate(self.q_max)
+            except TypeError:  # Happens with un-initializded normalizer
+                return 0.5
         else:
-            return 0.5
+            if self.n > 0:
+                return self.reward_normalizer.evaluate(self.q / self.n)
+            elif self.parent is not None:
+                return self.parent.get_reward(mode)
+            else:
+                return 0.5
 
     def select_random(self):
         assert self.children and not self.terminal
@@ -147,20 +150,28 @@ class BaseMCTSAgent(Agent):
         self.n_mc_target = n_mc_target
         self.n_mc_min = n_mc_min
         self.n_mc_max = n_mc_max
+        self.mcts_mode=mcts_mode
         self.c_puct = c_puct
+
         self.reward_range = reward_range
         self.verbose = verbose
-        self.mcts_mode=mcts_mode
 
         self.sim_env = copy.deepcopy(self.env)
         self.sim_env.reset_at_episode_end = False  # Avoids expensive re-sampling of jets every time we parse a path
-
         self._init_episode()
 
     def set_env(self, env):
         self.env = env
         self.sim_env = copy.deepcopy(self.env)
         self.sim_env.reset_at_episode_end = False  # Avoids expensive re-sampling of jets every time we parse a path
+        self._init_episode()
+
+    def set_precision(self, n_mc_target, n_mc_min, n_mc_max, mcts_mode, c_puct):
+        self.n_mc_target = n_mc_target
+        self.n_mc_min = n_mc_min
+        self.n_mc_max = n_mc_max
+        self.mcts_mode = mcts_mode
+        self.c_puct = c_puct
 
     def _predict(self, state):
         action, info = self._mcts(state)

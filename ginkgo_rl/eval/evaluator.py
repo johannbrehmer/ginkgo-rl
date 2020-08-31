@@ -2,7 +2,9 @@ import gym
 import numpy as np
 from matplotlib import pyplot as plt
 import sys
+import os
 from tqdm import trange
+import pickle
 
 from ginkgo_rl import GinkgoLikelihoodEnv, GinkgoLikelihoodShuffled1DEnv, GinkgoLikelihood1DEnv, GinkgoLikelihoodShuffledEnv
 
@@ -12,30 +14,34 @@ from run_physics_experiment_invM import compare_map_gt_and_bs_trees as compute_t
 
 
 class GinkgoEvaluator():
-    def __init__(self, n_jets=8):
-        self.n_jets = n_jets
-        self.jets = self._init_jets()
+    def __init__(self, filename, redraw_existing_jets=False, n_jets=8):
+        self.filename = filename
 
-        self.methods = []  # Method names
-        self.log_likelihoods = {}  # Log likelihood results
-        self.illegal_actions = {}  # Number of illegal actions
+        if os.path.exists(filename) and not redraw_existing_jets:
+            self._load()
+        else:
+            self.n_jets = n_jets
+            self.jets = self._init_jets()
+            self.methods = []  # Method names
+            self.log_likelihoods = {}  # Log likelihood results
+            self.illegal_actions = {}  # Number of illegal actions
+            self._save()
 
     def eval_true(self, method):
-        self.methods.append(method)
-        self.log_likelihoods[method] = [[self._compute_true_log_likelihood(jet)] for jet in self.jets]
-        self.illegal_actions[method] = [[0] for _ in self.jets]
+        log_likelihoods = [[self._compute_true_log_likelihood(jet)] for jet in self.jets]
+        illegal_actions = [[0] for _ in self.jets]
+        self._update_results(method, log_likelihoods, illegal_actions)
 
     def eval_exact_trellis(self, method):
-        self.methods.append(method)
-        self.log_likelihoods[method] = [[self._compute_maximum_log_likelihood(jet)] for jet in self.jets]
-        self.illegal_actions[method] = [[0] for _ in self.jets]
+        log_likelihoods = [[self._compute_maximum_log_likelihood(jet)] for jet in self.jets]
+        illegal_actions = [[0] for _ in self.jets]
+        self._update_results(method, log_likelihoods, illegal_actions)
 
     def eval(self, method, model, env_name, n_repeats=100):
         env = self._init_env(env_name)
 
-        self.methods.append(method)
-        self.log_likelihoods[method] = [[] for _ in range(self.n_jets)]
-        self.illegal_actions[method] = [[] for _ in range(self.n_jets)]
+        log_likelihoods = [[] for _ in range(self.n_jets)]
+        illegal_actions = [[] for _ in range(self.n_jets)]
 
         for i in trange(len(self.jets) * n_repeats):
             i_jet = i // n_repeats
@@ -43,8 +49,10 @@ class GinkgoEvaluator():
 
             env.set_internal_state(jet)
             log_likelihood, error = self._episode(model, env)
-            self.log_likelihoods[method][i_jet].append(log_likelihood)
-            self.illegal_actions[method][i_jet].append(error)
+            log_likelihoods[i_jet].append(log_likelihood)
+            illegal_actions[i_jet].append(error)
+
+        self._update_results(method, log_likelihoods, illegal_actions)
 
     def eval_random(self, method, env_name, n_repeats=100):
         self.eval(method, None, env_name, n_repeats)
@@ -53,7 +61,7 @@ class GinkgoEvaluator():
         for method in self.methods:
             yield method, self.log_likelihoods[method], self.illegal_actions[method]
 
-    def plot_log_likelihoods(self, cols=2, rows=4, ymax=0.25, deltax_min=5., deltax_max=20., xbins=50, panelsize=4.):
+    def plot_log_likelihoods(self, cols=2, rows=4, ymax=0.5, deltax_min=5., deltax_max=20., xbins=25, panelsize=4., filename=None):
         colors = [f"C{i}" for i in range(20)]
         fig = plt.figure(figsize=(rows*panelsize, cols*panelsize))
 
@@ -88,7 +96,31 @@ class GinkgoEvaluator():
             plt.ylim(0., ymax)
 
         plt.tight_layout()
+        if filename is not None:
+            plt.savefig(filename)
         return fig
+
+    def _update_results(self, method, log_likelihoods, illegal_actions):
+        self._load()  # Just in case another process changed the data in the file in the mean time
+        self.methods.append(method)
+        self.log_likelihoods[method] = log_likelihoods
+        self.illegal_actions[method] = illegal_actions
+        self._save()
+
+    def _save(self):
+        data = {"n_jets": self.n_jets, "jets": self.jets, "methods": self.methods, "log_likelihoods": self.log_likelihoods, "illegal_actions": self.illegal_actions}
+        with open(self.filename, 'wb') as file:
+            pickle.dump(data, file)
+
+    def _load(self):
+        with open(self.filename, 'rb') as file:
+            data = pickle.load(file)
+
+        self.n_jets = data["n_jets"]
+        self.jets = data["jets"]
+        self.methods = data["methods"]
+        self.log_likelihoods = data["log_likelihoods"]
+        self.illegal_actions = data["illegal_actions"]
 
     def _init_env(self, env_name="GinkgoLikelihood-v0"):
         if env_name == "GinkgoLikelihood-v0":
@@ -116,7 +148,8 @@ class GinkgoEvaluator():
         env.close()
         return jets
 
-    def _episode(self, model, env):
+    @staticmethod
+    def _episode(model, env):
         state = env.get_state()
         done = False
         log_likelihood = 0.
@@ -149,13 +182,14 @@ class GinkgoEvaluator():
 
             reward, state = next_reward, next_state
 
-        return log_likelihood, errors
+        return float(log_likelihood), int(errors)
 
     @staticmethod
     def _compute_true_log_likelihood(jet):
         return sum(jet[0]["logLH"])
 
-    def _compute_maximum_log_likelihood(self, jet):
+    @staticmethod
+    def _compute_maximum_log_likelihood(jet):
         """ Based on Sebastian's code at https://github.com/iesl/hierarchical-trellis/blob/sebastian/src/Jet_Experiments_invM_exactTrellis.ipynb """
         _, _, max_log_likelihood, _, _ = compute_trellis(jet[0])
         return max_log_likelihood

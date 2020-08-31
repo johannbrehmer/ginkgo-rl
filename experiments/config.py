@@ -1,15 +1,15 @@
 import torch
+import datetime
 from sacred import Experiment
 
 ex = Experiment()
-
-__all__ = ["ex", "config", "env_config", "mcts_config", "mcts_train_config", "technical_config"]
 
 
 # noinspection PyUnusedLocal
 @ex.config
 def config():
-    name = "model"
+    name = "run"
+    run_name = f"{name}_{datetime.datetime.now().strftime('%Y%m%d_%H%M')}"
     env_type = "1d"
     debug = False
 
@@ -41,7 +41,7 @@ def env_config():
 
 # noinspection PyUnusedLocal
 @ex.config
-def mcts_config():
+def agent_config():
     reward_range = (-200., 0.)
     optim_kwargs = None
     history_length = None
@@ -49,15 +49,33 @@ def mcts_config():
 
 # noinspection PyUnusedLocal
 @ex.config
-def mcts_train_config():
-    n_mc_target = 5
-    n_mc_min = 5
-    n_mc_max = 100
+def train_config():
+    train_n_mc_target = 5
+    train_n_mc_min = 5
+    train_n_mc_max = 100
 
-    mcts_mode = "mean"
-    c_puct = 1.0
+    train_mcts_mode = "mean"
+    train_c_puct = 1.0
 
     train_steps = 100000
+
+
+# noinspection PyUnusedLocal
+@ex.config
+def eval_config():
+    eval_n_mc_target = 10
+    eval_n_mc_min = 10
+    eval_n_mc_max = 250
+    eval_mcts_mode = "mean"
+    eval_c_puct = 1.0
+
+    eval_jets = 8
+    eval_repeats = 100
+
+    eval_filename = "./data/eval.pickle"
+    eval_figure_path = "./figures/"
+
+    redraw_eval_jets = False
 
 
 # noinspection PyUnusedLocal

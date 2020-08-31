@@ -1,1 +1,1 @@
-from .test import GinkgoEvaluator
+from .evaluator import GinkgoEvaluator
