@@ -14,7 +14,7 @@ from run_physics_experiment_invM import compare_map_gt_and_bs_trees as compute_t
 
 
 class GinkgoEvaluator():
-    def __init__(self, filename, redraw_existing_jets=False, n_jets=8):
+    def __init__(self, filename, redraw_existing_jets=False, n_jets=8, auto_eval_truth_mle=True):
         self.filename = filename
 
         if os.path.exists(filename) and not redraw_existing_jets:
@@ -26,6 +26,10 @@ class GinkgoEvaluator():
             self.log_likelihoods = {}  # Log likelihood results
             self.illegal_actions = {}  # Number of illegal actions
             self._save()
+
+            if auto_eval_truth_mle:
+                self.eval_true("Truth")
+                self.eval_exact_trellis("MLE (Trellis)")
 
     def eval_true(self, method):
         log_likelihoods = [[self._compute_true_log_likelihood(jet)] for jet in self.jets]

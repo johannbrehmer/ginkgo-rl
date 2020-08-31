@@ -1,6 +1,7 @@
 import torch
 import datetime
 from sacred import Experiment
+from sacred.observers import FileStorageObserver
 
 ex = Experiment()
 
@@ -9,9 +10,12 @@ ex = Experiment()
 @ex.config
 def config():
     name = "run"
-    run_name = f"{name}_{datetime.datetime.now().strftime('%Y%m%d_%H%M')}"
+    run_name = f"{name}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
     env_type = "1d"
     debug = False
+
+    # Set up observer
+    ex.observers.append(FileStorageObserver(f"./data/runs/{run_name}"))
 
 
 # noinspection PyUnusedLocal
@@ -72,7 +76,7 @@ def eval_config():
     eval_jets = 8
     eval_repeats = 100
 
-    eval_filename = "./data/eval.pickle"
+    eval_filename = "./data/eval/eval.pickle"
     eval_figure_path = "./figures/"
 
     redraw_eval_jets = False

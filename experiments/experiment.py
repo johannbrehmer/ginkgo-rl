@@ -4,7 +4,7 @@ import logging
 import sys
 import torch
 import os
-from sacred.observers import FileStorageObserver
+import numpy as np
 
 sys.path.append("../")
 from experiments.config import ex, config, env_config, agent_config, train_config, technical_config
@@ -16,10 +16,12 @@ logger = logging.getLogger(__name__)
 
 
 @ex.capture
-def setup_run(name, run_name):
+def setup_run(name, run_name, seed):
     logger.info(f"Setting up run {name}")
     os.makedirs(f"./data/runs/{run_name}/", exist_ok=True)
-    ex.observers.append(FileStorageObserver(f"./data/runs/{run_name}/"))
+
+    torch.manual_seed(seed)
+    np.random.seed(seed)
 
 
 @ex.capture
@@ -138,13 +140,13 @@ def eval(agent, name, env_type, eval_n_mc_target, eval_n_mc_min, eval_n_mc_max, 
     logger.info("Starting evaluation")
     os.makedirs(os.path.dirname(eval_filename), exist_ok=True)
     os.makedirs(eval_figure_path, exist_ok=True)
-    evaluator = GinkgoEvaluator(filename=eval_filename, n_jets=eval_jets, redraw_existing_jets=redraw_eval_jets)
+    evaluator = GinkgoEvaluator(filename=eval_filename, n_jets=eval_jets, redraw_existing_jets=redraw_eval_jets, auto_eval_truth_mle=True)
 
     agent.set_precision(eval_n_mc_target, eval_n_mc_min, eval_n_mc_max, eval_mcts_mode, eval_c_puct)
     env_name = "GinkgoLikelihood1D-v0" if env_type=="1d" else "GinkgoLikelihood-v0"
     evaluator.eval(name, agent, env_name=env_name, n_repeats=eval_repeats)
 
-    evaluator.plot_log_likelihoods(filename=f"{eval_figure_path}/{name.pdf}")
+    evaluator.plot_log_likelihoods(filename=f"{eval_figure_path}/{name}.pdf")
 
 
 @ex.capture
@@ -158,9 +160,9 @@ def save_agent(agent, run_name):
 @ex.automain
 def main():
     logger.info(f"Hi!")
+
     setup_run()
     setup_logging()
-
     env = create_env()
     agent = create_mcts_agent(env=env)
 
