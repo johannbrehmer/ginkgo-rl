@@ -65,6 +65,29 @@ class GinkgoEvaluator():
         for method in self.methods:
             yield method, self.log_likelihoods[method], self.illegal_actions[method]
 
+    def __str__(self):
+        lengths = 20, 6, 3
+
+        results = []
+        for method, log_likelihood, illegals in self.get_results():
+            mean_log_likelihood = np.nanmean([np.nanmean(x) for x in log_likelihood])
+            mean_illegals = np.nanmean([np.nanmean(x) for x in illegals])
+            results.append((method, mean_log_likelihood, mean_illegals))
+
+        lines = []
+        lines.append("")
+        lines.append("-"*(lengths[0] + lengths[1] + lengths[2] + (3-1)*3))
+        lines.append(f"{'Method':>{lengths[0]}s} | {'Log p':>{lengths[1]}s} | {'Err':>{lengths[2]}s}")
+        lines.append("-"*(lengths[0] + lengths[1] + lengths[2] + (3-1)*3))
+
+        for method, mean_log_likelihood, mean_illegals in sorted(results, key=lambda x : x[1], reverse=True):
+            lines.append(f"{method:>{lengths[0]}s} | {mean_log_likelihood:>{lengths[1]}.{lengths[1] - 4}f} | {mean_illegals:>{lengths[2]}.{lengths[2] - 2}f}")
+
+        lines.append("-"*(lengths[0] + lengths[1] + lengths[2] + (3-1)*3))
+        lines.append("")
+        
+        return "\n".join(lines)
+
     def plot_log_likelihoods(self, cols=2, rows=4, ymax=0.5, deltax_min=5., deltax_max=20., xbins=25, panelsize=4., filename=None):
         colors = [f"C{i}" for i in range(20)]
         fig = plt.figure(figsize=(rows*panelsize, cols*panelsize))
@@ -106,9 +129,14 @@ class GinkgoEvaluator():
 
     def _update_results(self, method, log_likelihoods, illegal_actions):
         self._load()  # Just in case another process changed the data in the file in the mean time
+
+        while method in self.methods:
+            self.methods.remove(method)
         self.methods.append(method)
+
         self.log_likelihoods[method] = log_likelihoods
         self.illegal_actions[method] = illegal_actions
+
         self._save()
 
     def _save(self):

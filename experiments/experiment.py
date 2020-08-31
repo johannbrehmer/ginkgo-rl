@@ -9,7 +9,7 @@ import numpy as np
 sys.path.append("../")
 from experiments.config import ex, config, env_config, agent_config, train_config, technical_config
 from ginkgo_rl import GinkgoLikelihood1DEnv, GinkgoLikelihoodEnv
-from ginkgo_rl import MCTSAgent
+from ginkgo_rl import MCTSAgent, GreedyAgent, RandomAgent
 from ginkgo_rl import GinkgoEvaluator
 
 logger = logging.getLogger(__name__)
@@ -106,46 +106,74 @@ def create_env(
 
 
 @ex.capture
-def create_mcts_agent(
-    env, reward_range, optim_kwargs, history_length, train_n_mc_target, train_n_mc_min, train_n_mc_max, train_mcts_mode, train_c_puct, device, dtype,
+def create_agent(
+    env, algorithm, reward_range, optim_kwargs, history_length, train_n_mc_target, train_n_mc_min, train_n_mc_max, train_mcts_mode, train_c_puct, device, dtype,
 ):
-    logger.info(f"Setting up agent")
-    agent = MCTSAgent(
-        env,
-        reward_range=reward_range,
-        optim_kwargs=optim_kwargs,
-        history_length=history_length,
-        n_mc_target=train_n_mc_target,
-        n_mc_min=train_n_mc_min,
-        n_mc_max=train_n_mc_max,
-        mcts_mode=train_mcts_mode,
-        c_puct=train_c_puct,
-        device=device,
-        dtype=dtype,
-    )
+    logger.info(f"Setting up {algorithm} agent ")
+
+    if algorithm == "mcts":
+        agent = MCTSAgent(
+            env,
+            reward_range=reward_range,
+            optim_kwargs=optim_kwargs,
+            history_length=history_length,
+            n_mc_target=train_n_mc_target,
+            n_mc_min=train_n_mc_min,
+            n_mc_max=train_n_mc_max,
+            mcts_mode=train_mcts_mode,
+            c_puct=train_c_puct,
+            device=device,
+            dtype=dtype,
+        )
+    elif algorithm == "greedy":
+        agent = GreedyAgent(env, device=device, dtype=dtype)
+    elif algorithm == "random":
+        agent = RandomAgent(env, device=device, dtype=dtype)
+    else:
+        raise ValueError(algorithm)
+
     return agent
 
 
 @ex.capture
-def train(env, agent, train_n_mc_target, train_n_mc_min, train_n_mc_max, train_mcts_mode, train_c_puct, train_steps):
-    logger.info(f"Starting training for {train_steps} steps")
-    agent.set_precision(train_n_mc_target, train_n_mc_min, train_n_mc_max, train_mcts_mode, train_c_puct)
-    _ = env.reset()
-    agent.learn(total_timesteps=train_steps)
+def train(env, agent, algorithm, train_n_mc_target, train_n_mc_min, train_n_mc_max, train_mcts_mode, train_c_puct, train_steps):
+    if algorithm in ["greedy", "random"]:
+        logger.info(f"No training necessary for algorithm {algorithm}")
+
+    else:
+        logger.info(f"Starting {algorithm} training for {train_steps} steps")
+
+        # Initialize MCTS agent settings (this won't do anything for some other types of agent)
+        try:
+            agent.set_precision(train_n_mc_target, train_n_mc_min, train_n_mc_max, train_mcts_mode, train_c_puct)
+        except:
+            pass
+
+        # Train
+        _ = env.reset()
+        agent.learn(total_timesteps=train_steps)
+
     env.close()
 
 
 @ex.capture
-def eval(agent, name, env_type, eval_n_mc_target, eval_n_mc_min, eval_n_mc_max, eval_mcts_mode, eval_c_puct, eval_repeats, eval_jets, eval_filename, eval_figure_path, redraw_eval_jets):
+def eval(agent, name, algorithm, env_type, eval_n_mc_target, eval_n_mc_min, eval_n_mc_max, eval_mcts_mode, eval_c_puct, eval_repeats, eval_jets, eval_filename, eval_figure_path, redraw_eval_jets):
     logger.info("Starting evaluation")
     os.makedirs(os.path.dirname(eval_filename), exist_ok=True)
     os.makedirs(eval_figure_path, exist_ok=True)
     evaluator = GinkgoEvaluator(filename=eval_filename, n_jets=eval_jets, redraw_existing_jets=redraw_eval_jets, auto_eval_truth_mle=True)
 
-    agent.set_precision(eval_n_mc_target, eval_n_mc_min, eval_n_mc_max, eval_mcts_mode, eval_c_puct)
-    env_name = "GinkgoLikelihood1D-v0" if env_type=="1d" else "GinkgoLikelihood-v0"
-    evaluator.eval(name, agent, env_name=env_name, n_repeats=eval_repeats)
+    try:
+        agent.set_precision(eval_n_mc_target, eval_n_mc_min, eval_n_mc_max, eval_mcts_mode, eval_c_puct)
+    except:
+        pass
 
+    env_name = "GinkgoLikelihood1D-v0" if env_type=="1d" else "GinkgoLikelihood-v0"
+    n_repeats = 1 if algorithm in ["greedy"] else eval_repeats
+    evaluator.eval(name, agent, env_name=env_name, n_repeats=n_repeats)
+
+    logger.info("Results:")
+    print(evaluator)
     evaluator.plot_log_likelihoods(filename=f"{eval_figure_path}/{name}.pdf")
 
 
@@ -164,7 +192,7 @@ def main():
     setup_run()
     setup_logging()
     env = create_env()
-    agent = create_mcts_agent(env=env)
+    agent = create_agent(env=env)
 
     train(env, agent)
     save_agent(agent)

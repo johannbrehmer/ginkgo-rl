@@ -9,10 +9,11 @@ ex = Experiment()
 # noinspection PyUnusedLocal
 @ex.config
 def config():
-    name = "run"
-    run_name = f"{name}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    algorithm = "mcts"  # one of "mcts", "greedy", "random"
     env_type = "1d"
-    debug = False
+
+    name = algorithm
+    run_name = f"{name}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
 
     # Set up observer
     ex.observers.append(FileStorageObserver(f"./data/runs/{run_name}"))
@@ -88,4 +89,4 @@ def technical_config():
     device = torch.device("cpu")
     dtype = torch.float
     seed = 1971248
-
+    debug = False
