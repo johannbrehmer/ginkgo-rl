@@ -138,6 +138,20 @@ def create_agent(
 
 
 @ex.capture
+def log_training(_run, callback_info):
+    loss = callback_info.get('loss')
+    reward = callback_info.get('reward')
+    episode_length = callback_info.get('episode_length')
+
+    if loss is not None:
+        _run.log_scalar("training_loss", loss)
+    if reward is not None:
+        _run.log_scalar("training_reward", reward)
+    if episode_length is not None:
+        _run.log_scalar("training_episode_length", episode_length)
+
+
+@ex.capture
 def train(env, agent, algorithm, train_n_mc_target, train_n_mc_min, train_n_mc_max, train_mcts_mode, train_c_puct, train_steps):
     if algorithm in ["greedy", "random", "truth", "mle", "beamsearch"]:
         logger.info(f"No training necessary for algorithm {algorithm}")
@@ -153,13 +167,13 @@ def train(env, agent, algorithm, train_n_mc_target, train_n_mc_min, train_n_mc_m
 
         # Train
         _ = env.reset()
-        agent.learn(total_timesteps=train_steps)
+        agent.learn(total_timesteps=train_steps, callback=log_training)
 
     env.close()
 
 
 @ex.capture
-def eval(agent, name, algorithm, env_type, eval_n_mc_target, eval_n_mc_min, eval_n_mc_max, eval_mcts_mode, eval_c_puct, eval_repeats, eval_jets, eval_filename, eval_figure_path, redraw_eval_jets, beamsize):
+def eval(agent, name, algorithm, env_type, eval_n_mc_target, eval_n_mc_min, eval_n_mc_max, eval_mcts_mode, eval_c_puct, eval_repeats, eval_jets, eval_filename, eval_figure_path, redraw_eval_jets, beamsize, _run):
     # Set up evaluator
     logger.info("Starting evaluation")
     os.makedirs(os.path.dirname(eval_filename), exist_ok=True)
@@ -173,24 +187,28 @@ def eval(agent, name, algorithm, env_type, eval_n_mc_target, eval_n_mc_min, eval
         except:
             pass
         env_name = "GinkgoLikelihood1D-v0" if env_type=="1d" else "GinkgoLikelihood-v0"
-        evaluator.eval(name, agent, env_name=env_name, n_repeats=eval_repeats)
+        log_likelihood, errors = evaluator.eval(name, agent, env_name=env_name, n_repeats=eval_repeats)
 
     elif algorithm == "random":
         env_name = "GinkgoLikelihood1D-v0" if env_type=="1d" else "GinkgoLikelihood-v0"
-        evaluator.eval(name, agent, env_name=env_name, n_repeats=eval_repeats)
+        log_likelihood, errors = evaluator.eval(name, agent, env_name=env_name, n_repeats=eval_repeats)
 
     elif algorithm == "greedy":
         env_name = "GinkgoLikelihood1D-v0" if env_type=="1d" else "GinkgoLikelihood-v0"
-        evaluator.eval(name, agent, env_name=env_name, n_repeats=1)
+        log_likelihood, errors = evaluator.eval(name, agent, env_name=env_name, n_repeats=1)
 
     elif algorithm == "beamsearch":
-        evaluator.eval_beam_search(name, beam_size=beamsize)
+        log_likelihood, errors = evaluator.eval_beam_search(name, beam_size=beamsize)
 
     elif algorithm == "truth":
-        evaluator.eval_true("Truth")
+        log_likelihood, errors = evaluator.eval_true("Truth")
 
     elif algorithm == "mle":
-        evaluator.eval_exact_trellis("MLE (Trellis)")
+        log_likelihood, errors = evaluator.eval_exact_trellis("MLE (Trellis)")
+
+    # Log results
+    _run.log_scalar("eval_log_likelihood", np.mean(np.flatten(log_likelihood)))
+    _run.log_scalar("eval_illegal_actions", np.mean(np.flatten(errors)))
 
     # Print and plot results
     logger.info("Results:")

@@ -200,18 +200,22 @@ class BaseMCTSAgent(Agent):
         if self.training:
             self.history.store(log_prob=kwargs["log_prob"], reward=reward)
 
+        loss = 0.0
         if self.training and done:
             # Training
-            self._train()
+            loss = self._train()
 
             # Reset memory for next episode
             self.history.clear()
+
+        return loss
 
     def _parse_path(self, state, path):
         """ Given a path (list of actions), computes the resulting environment state and total reward """
 
         # Store env state state
-        self.sim_env.set_internal_state(self.env.get_internal_state())
+        if self.sim_env.state is None or not np.all(np.isclose(self.sim_env.state, self.env.state)):
+            self.sim_env.set_internal_state(self.env.get_internal_state())
         self.sim_env.verbose = False
 
         # Follow path
@@ -228,6 +232,21 @@ class BaseMCTSAgent(Agent):
 
         state = self._tensorize(state)
         return state, total_reward, terminal
+
+    def _parse_action(self, action):
+        """ Given a state and an action, computes the log likelihood """
+
+        if self.sim_env.state is None or not np.all(np.isclose(self.sim_env.state, self.env.state)):
+            self.sim_env.set_internal_state(self.env.get_internal_state())
+        self.sim_env.verbose = False
+
+        try:
+            _, _ = action
+            log_likelihood = self.sim_env._compute_log_likelihood(action)
+        except TypeError:
+            log_likelihood = self.sim_env._compute_log_likelihood(self.sim_env.unwrap_action(action))
+
+        return log_likelihood
 
     def _init_episode(self):
         """ Initializes MCTS tree and total reward so far """
@@ -305,7 +324,7 @@ class BaseMCTSAgent(Agent):
         raise NotImplementedError
 
     def _train(self):
-        """ Policy updates at end of episode """
+        """ Policy updates at end of episode and returns loss """
         raise NotImplementedError
 
 
@@ -318,7 +337,7 @@ class RandomMCTSAgent(BaseMCTSAgent):
             return 1. / len(legal_actions) * torch.ones(len(legal_actions), dtype=self.dtype)
 
     def _train(self):
-        pass
+        return 0.0
 
 
 class MCTSAgent(BaseMCTSAgent):
@@ -349,7 +368,8 @@ class MCTSAgent(BaseMCTSAgent):
             action_ = torch.tensor([action]).to(self.device, self.dtype)
 
             if self.log_likelihood_feature:
-                _, log_likelihood, _ = self._parse_path(state, [action])
+                log_likelihood = self._parse_action(action)
+                log_likelihood = np.clip(log_likelihood, self.reward_range[0], self.reward_range[1])
                 log_likelihood_ = torch.tensor([log_likelihood]).to(self.device, self.dtype)
                 batch_states.append(torch.cat((action_, log_likelihood_, state_), dim=0).unsqueeze(0))
             else:
@@ -368,3 +388,5 @@ class MCTSAgent(BaseMCTSAgent):
 
         # Gradient update
         self._gradient_step(loss)
+
+        return loss.item()

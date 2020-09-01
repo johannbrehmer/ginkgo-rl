@@ -117,7 +117,7 @@ class GinkgoLikelihoodEnv(Env):
         return self.state
 
     def get_internal_state(self):
-        return copy.deepcopy((self.jet, self.n, self.state, self.is_leaf, self.illegal_action_counter))
+        return (self.jet, self.n, self.state, self.is_leaf, self.illegal_action_counter)
 
     def set_internal_state(self, internal_state):
         self.jet, self.n, self.state, self.is_leaf, self.illegal_action_counter = copy.deepcopy(internal_state)
@@ -345,80 +345,80 @@ class GinkgoLikelihood1DEnv(GinkgoLikelihoodEnv):
             return super().step(self.unwrap_action(action))
 
 
-class PermutationMixin():
-    @staticmethod
-    def _create_permutation(n):
-        permutation, inverse_permutation = [None for _ in range(n)], [None for _ in range(n)]
-        for i, j in enumerate(np.random.permutation(n)):
-            permutation[i] = j
-            inverse_permutation[j] = i
-        return permutation, inverse_permutation
+# class PermutationMixin():
+#     @staticmethod
+#     def _create_permutation(n):
+#         permutation, inverse_permutation = [None for _ in range(n)], [None for _ in range(n)]
+#         for i, j in enumerate(np.random.permutation(n)):
+#             permutation[i] = j
+#             inverse_permutation[j] = i
+#         return permutation, inverse_permutation
 
 
-class GinkgoLikelihoodShuffledEnv(PermutationMixin, GinkgoLikelihoodEnv):
-    """
-    Wrapper around GinkgoLikelihoodEnv that shuffles the particles so they show up in random positions.
-    """
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.permutation, self.inverse_permutation = self._create_permutation(self.n_max)
-
-    def reset(self):
-        state = super().reset()
-        self.permutation, self.inverse_permutation = self._create_permutation(self.n_max)
-        state = state[self.permutation, :]
-        return state
-
-    def step(self, action):
-        action_ = self.permutation[action[0]], self.permutation[action[1]]
-        state_, reward, done, info = super().step(action_)
-        self.permutation, self.inverse_permutation = self._create_permutation(self.n_max)
-        state = state_[self.permutation, :]
-        return state, reward, done, info
-
-    def render(self, mode="human"):
-        """ Visualize / report what's happening """
-
-        logger.info(f"{self.n} particles:")
-        for i in range(self.n_max):
-            i_ = self.permutation[i]
-            p = self.state[i_]
-            if np.max(p) > 0.:
-                logger.info(f"  p[{i:>2d}] = ({p[0]:5.1f}, {p[1]:5.1f}, {p[2]:5.1f}, {p[3]:5.1f})")
-
-    def get_state(self):
-        return self.state[self.permutation, :]
-
-
-class GinkgoLikelihoodShuffled1DEnv(GinkgoLikelihoodShuffledEnv):
-    """
-    Wrapper around GinkgoLikelihoodEnv to support baseline RL algorithms designed for 1D discrete, non-tuple action spaces.
-    """
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.n_actions = self.n_max * (self.n_max - 1) // 2
-        self.action_space = Discrete(self.n_actions)
-
-    def wrap_action(self, action_tuple):
-        assert self._check_acceptability(action_tuple)
-        i, j = max(action_tuple), min(action_tuple)
-        return i  * (i - 1) // 2 + j
-
-    def unwrap_action(self, action_int):
-        i = 1
-        for k in range(1, self.n_max + 1):
-            if k * (k - 1) // 2 > action_int:
-                i = k - 1
-                break
-
-        j = action_int - i * (i - 1) // 2
-
-        return i, j
-
-    def step(self, action):
-        try:
-            _, _ = action
-            return super().step(action)
-        except TypeError:
-            return super().step(self.unwrap_action(action))
+# class GinkgoLikelihoodShuffledEnv(PermutationMixin, GinkgoLikelihoodEnv):
+#     """
+#     Wrapper around GinkgoLikelihoodEnv that shuffles the particles so they show up in random positions.
+#     """
+#     def __init__(self, *args, **kwargs):
+#         super().__init__(*args, **kwargs)
+#         self.permutation, self.inverse_permutation = self._create_permutation(self.n_max)
+#
+#     def reset(self):
+#         state = super().reset()
+#         self.permutation, self.inverse_permutation = self._create_permutation(self.n_max)
+#         state = state[self.permutation, :]
+#         return state
+#
+#     def step(self, action):
+#         action_ = self.permutation[action[0]], self.permutation[action[1]]
+#         state_, reward, done, info = super().step(action_)
+#         self.permutation, self.inverse_permutation = self._create_permutation(self.n_max)
+#         state = state_[self.permutation, :]
+#         return state, reward, done, info
+#
+#     def render(self, mode="human"):
+#         """ Visualize / report what's happening """
+#
+#         logger.info(f"{self.n} particles:")
+#         for i in range(self.n_max):
+#             i_ = self.permutation[i]
+#             p = self.state[i_]
+#             if np.max(p) > 0.:
+#                 logger.info(f"  p[{i:>2d}] = ({p[0]:5.1f}, {p[1]:5.1f}, {p[2]:5.1f}, {p[3]:5.1f})")
+#
+#     def get_state(self):
+#         return self.state[self.permutation, :]
+#
+#
+# class GinkgoLikelihoodShuffled1DEnv(GinkgoLikelihoodShuffledEnv):
+#     """
+#     Wrapper around GinkgoLikelihoodEnv to support baseline RL algorithms designed for 1D discrete, non-tuple action spaces.
+#     """
+#
+#     def __init__(self, *args, **kwargs):
+#         super().__init__(*args, **kwargs)
+#         self.n_actions = self.n_max * (self.n_max - 1) // 2
+#         self.action_space = Discrete(self.n_actions)
+#
+#     def wrap_action(self, action_tuple):
+#         assert self._check_acceptability(action_tuple)
+#         i, j = max(action_tuple), min(action_tuple)
+#         return i  * (i - 1) // 2 + j
+#
+#     def unwrap_action(self, action_int):
+#         i = 1
+#         for k in range(1, self.n_max + 1):
+#             if k * (k - 1) // 2 > action_int:
+#                 i = k - 1
+#                 break
+#
+#         j = action_int - i * (i - 1) // 2
+#
+#         return i, j
+#
+#     def step(self, action):
+#         try:
+#             _, _ = action
+#             return super().step(action)
+#         except TypeError:
+#             return super().step(self.unwrap_action(action))

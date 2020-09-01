@@ -30,7 +30,7 @@ class Agent(nn.Module):
     def set_env(self, env):
         self.env = env
 
-    def learn(self, total_timesteps):
+    def learn(self, total_timesteps, callback=None):
         # Prepare training
         self.train()
         if list(self.parameters()):
@@ -44,11 +44,15 @@ class Agent(nn.Module):
         rewards = []
         episode = 0
 
+        episode_loss = 0.0
+        episode_reward = 0.0
+        episode_length = 0
+
         for steps in trange(total_timesteps):
             action, agent_info = self.predict(state)
-            next_state, next_reward, done, info = self.env.step(action)
+            next_state, next_reward, done, env_info = self.env.step(action)
 
-            self.update(
+            loss = self.update(
                 state=self._tensorize(state),
                 reward=reward,
                 action=action,
@@ -59,13 +63,22 @@ class Agent(nn.Module):
                 **agent_info
             )
 
+            episode_loss += loss
+            episode_reward += next_reward
+            episode_length += 1
             rewards.append(next_reward)
             state = next_state
             reward = next_reward
 
             if done:
+                callback(callback_info={"episode": episode, "episode_length": episode_length, "loss": episode_loss, "reward": episode_reward})
+
                 episode += 1
+                episode_loss = 0.0
+                episode_reward = 0.0
+                episode_length = 0
                 state = self.env.reset()
+
 
     def predict(self, state):
         """

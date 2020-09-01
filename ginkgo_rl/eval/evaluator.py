@@ -6,7 +6,7 @@ import os
 from tqdm import trange
 import pickle
 
-from ginkgo_rl import GinkgoLikelihoodEnv, GinkgoLikelihoodShuffled1DEnv, GinkgoLikelihood1DEnv, GinkgoLikelihoodShuffledEnv
+from ginkgo_rl import GinkgoLikelihoodEnv, GinkgoLikelihood1DEnv
 
 # Workaround for now until Trellis is better packaged
 sys.path.append("/Users/johannbrehmer/work/projects/shower_rl/hierarchical-trellis/src")
@@ -38,16 +38,19 @@ class GinkgoEvaluator():
         log_likelihoods = [[self._compute_true_log_likelihood(jet)] for jet in self.jets]
         illegal_actions = [[0] for _ in self.jets]
         self._update_results(method, log_likelihoods, illegal_actions)
+        return log_likelihoods, illegal_actions
 
     def eval_exact_trellis(self, method):
         log_likelihoods = [[self._compute_maximum_log_likelihood(jet)] for jet in self.jets]
         illegal_actions = [[0] for _ in self.jets]
         self._update_results(method, log_likelihoods, illegal_actions)
+        return log_likelihoods, illegal_actions
 
     def eval_beam_search(self, method, beam_size):
         log_likelihoods = [[self._compute_beam_search_log_likelihood(jet, beam_size)] for jet in self.jets]
         illegal_actions = [[0] for _ in self.jets]
         self._update_results(method, log_likelihoods, illegal_actions)
+        return log_likelihoods, illegal_actions
 
     def eval(self, method, model, env_name, n_repeats=100):
         env = self._init_env(env_name)
@@ -65,9 +68,10 @@ class GinkgoEvaluator():
             illegal_actions[i_jet].append(error)
 
         self._update_results(method, log_likelihoods, illegal_actions)
+        return log_likelihoods, illegal_actions
 
     def eval_random(self, method, env_name, n_repeats=100):
-        self.eval(method, None, env_name, n_repeats)
+        return self.eval(method, None, env_name, n_repeats)
 
     def get_results(self):
         for method in self.methods:
@@ -96,8 +100,9 @@ class GinkgoEvaluator():
 
         return "\n".join(lines)
 
-    def plot_log_likelihoods(self, cols=2, rows=4, ymax=0.5, deltax_min=5., deltax_max=20., xbins=25, panelsize=4., filename=None):
-        colors = [f"C{i}" for i in range(20)]
+    def plot_log_likelihoods(self, cols=2, rows=4, ymax=0.5, deltax_min=1., deltax_max=10., xbins=25, panelsize=4., filename=None, linestyles=["-", "--", ":", "-."], colors=[f"C{i}" for i in range(9)]):
+        colors = colors * 10
+        linestyles = linestyles * 10
         fig = plt.figure(figsize=(rows*panelsize, cols*panelsize))
 
         for j in range(self.n_jets):
@@ -112,13 +117,15 @@ class GinkgoEvaluator():
             xmax = xmax + 0.05 * (xmax - xmin)
             xmin = xmin - 0.05 * (xmax - xmin)
 
+            ls_counter = 0
             for i, (name, logp, _) in enumerate(self.get_results()):
                 logp_ = np.clip(logp, xmin + 1.e-9, xmax - 1.e-9)
 
                 if len(logp[j]) == 1:
-                    plt.plot([logp_[j][0], logp_[j][0]], [0., ymax], color=colors[i], ls="--", label=name)
+                    plt.plot([logp_[j][0], logp_[j][0]], [0., ymax], color=colors[i], ls=linestyles[ls_counter], label=name)
+                    ls_counter += 1
                 else:
-                    plt.hist(logp_[j], histtype="stepfilled", range=(xmin, xmax), color=colors[i], bins=xbins, lw=1.5, density=True, alpha=0.2)
+                    plt.hist(logp_[j], histtype="stepfilled", range=(xmin, xmax), color=colors[i], bins=xbins, lw=1.5, density=True, alpha=0.15)
                     plt.hist(logp_[j], histtype="step", range=(xmin, xmax), bins=xbins, color=colors[i], lw=1.5, density=True, label=name)
 
             if j == 0:
@@ -167,10 +174,6 @@ class GinkgoEvaluator():
             env = GinkgoLikelihoodEnv(min_reward=None, illegal_reward=0., illegal_actions_patience=3)
         elif env_name == "GinkgoLikelihood1D-v0":
             env = GinkgoLikelihood1DEnv(min_reward=None, illegal_reward=0., illegal_actions_patience=3)
-        elif env_name == "GinkgoLikelihoodShuffled-v0":
-            env = GinkgoLikelihoodShuffledEnv(min_reward=None, illegal_reward=0., illegal_actions_patience=3)
-        elif env_name == "GinkgoLikelihoodShuffled1D-v0":
-            env = GinkgoLikelihoodShuffled1DEnv(min_reward=None, illegal_reward=0., illegal_actions_patience=3)
         else:
             raise ValueError(env_name)
 

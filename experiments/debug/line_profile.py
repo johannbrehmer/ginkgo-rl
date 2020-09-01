@@ -2,7 +2,7 @@ import sys
 import logging
 from line_profiler import LineProfiler
 
-sys.path.append("../")
+sys.path.append("../../")
 from ginkgo_rl import GinkgoLikelihood1DEnv
 from ginkgo_rl import MCTSAgent
 from ginkgo_rl import GinkgoEvaluator
@@ -24,16 +24,16 @@ if __name__ == "__main__":
 
     # Set up env, model and evaluator
     env = GinkgoLikelihood1DEnv()
-    model = MCTSAgent(env, n_mc_min=5, n_mc_max=20)
-    # model.learn(total_timesteps=1)
-    evaluator = GinkgoEvaluator(n_jets=1)
+    model = MCTSAgent(env)
+    evaluator = GinkgoEvaluator(filename="temp.pickle", redraw_existing_jets=True, n_jets=3)
 
     # Profile
     lp = LineProfiler()
     lp.add_function(model._mcts)
     lp.add_function(model._parse_path)
-    lp.add_function(model.sim_env.unwrap_action)
-    lp.add_function(super(GinkgoLikelihood1DEnv, model.sim_env).step)
+    lp.add_function(model._evaluate_policy)
+    lp.add_function(model._batch_state)
+    lp.add_function(model._parse_action)
 
     lp(evaluator.eval)("MCTS", model, "GinkgoLikelihood1D-v0", n_repeats=1)
 
