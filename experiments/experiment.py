@@ -206,14 +206,20 @@ def eval(agent, name, algorithm, env_type, eval_n_mc_target, eval_n_mc_min, eval
     elif algorithm == "mle":
         log_likelihood, errors = evaluator.eval_exact_trellis("MLE (Trellis)")
 
+    # Mean results
+    log_likelihood = float(np.mean(np.array(log_likelihood).flatten()))
+    errors = float(np.mean(np.array(errors).flatten()))
+
     # Log results
-    _run.log_scalar("eval_log_likelihood", np.mean(np.flatten(log_likelihood)))
-    _run.log_scalar("eval_illegal_actions", np.mean(np.flatten(errors)))
+    _run.log_scalar("eval_log_likelihood", log_likelihood)
+    _run.log_scalar("eval_illegal_actions", errors)
 
     # Print and plot results
     logger.info("Results:")
     print(evaluator)
     evaluator.plot_log_likelihoods(filename=f"{eval_figure_path}/{name}.pdf")
+
+    return log_likelihood
 
 
 @ex.capture
@@ -237,6 +243,7 @@ def main():
     train(env, agent)
     save_agent(agent)
 
-    eval(agent)
+    result = eval(agent)
 
     logger.info(f"That's all, have a nice day!")
+    return result

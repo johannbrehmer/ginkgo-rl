@@ -1,9 +1,9 @@
 import torch
 import datetime
 from sacred import Experiment
-from sacred.observers import FileStorageObserver
+from sacred.observers import FileStorageObserver, MongoObserver
 
-ex = Experiment()
+ex = Experiment(name="rl-ginkgo")
 
 
 # noinspection PyUnusedLocal
@@ -17,6 +17,7 @@ def config():
 
     # Set up observer
     ex.observers.append(FileStorageObserver(f"./data/runs/{run_name}"))
+    ex.observers.append(MongoObserver())
 
 
 # noinspection PyUnusedLocal
