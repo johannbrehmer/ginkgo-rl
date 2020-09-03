@@ -107,7 +107,7 @@ def create_env(
 
 @ex.capture
 def create_agent(
-    env, algorithm, reward_range, optim_kwargs, history_length, train_n_mc_target, train_n_mc_min, train_n_mc_max, train_mcts_mode, train_c_puct, device, dtype,
+    env, algorithm, reward_range, history_length, train_n_mc_target, train_n_mc_min, train_n_mc_max, train_mcts_mode, train_c_puct, device, dtype, learning_rate, weight_decay
 ):
     logger.info(f"Setting up {algorithm} agent ")
 
@@ -115,7 +115,6 @@ def create_agent(
         agent = MCTSAgent(
             env,
             reward_range=reward_range,
-            optim_kwargs=optim_kwargs,
             history_length=history_length,
             n_mc_target=train_n_mc_target,
             n_mc_min=train_n_mc_min,
@@ -124,6 +123,8 @@ def create_agent(
             c_puct=train_c_puct,
             device=device,
             dtype=dtype,
+            lr=learning_rate,
+            weight_decay=weight_decay,
         )
     elif algorithm == "greedy":
         agent = GreedyAgent(env, device=device, dtype=dtype)

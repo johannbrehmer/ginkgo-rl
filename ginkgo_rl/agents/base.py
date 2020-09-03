@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 class Agent(nn.Module):
     """ Abstract base agent class """
 
-    def __init__(self, env, gamma=1.00, optim_kwargs=None, history_length=None, dtype=torch.float, device=torch.device("cpu"), *args, **kwargs):
+    def __init__(self, env, gamma=1.00, lr=1.0e-3, weight_decay=0.0, history_length=None, dtype=torch.float, device=torch.device("cpu"), *args, **kwargs):
         self.env = env
         self.gamma = gamma
         self.device = device
@@ -23,7 +23,8 @@ class Agent(nn.Module):
         self.num_actions = self.action_space.n
         self._init_replay_buffer(history_length)
         self.optimizer = None
-        self.optim_kwargs = optim_kwargs
+        self.lr = lr
+        self.weight_decay = weight_decay
 
         super().__init__()
 
@@ -34,8 +35,7 @@ class Agent(nn.Module):
         # Prepare training
         self.train()
         if list(self.parameters()):
-            optim_kwargs = {} if self.optim_kwargs is None else self.optim_kwargs
-            self.optimizer = torch.optim.Adam(params=self.parameters(), **optim_kwargs)
+            self.optimizer = torch.optim.Adam(params=self.parameters(), lr=self.lr, weight_decay=self.weight_decay)
         else:
             self.optimizer = None  # For non-NN methods
 

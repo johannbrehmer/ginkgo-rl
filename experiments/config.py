@@ -49,7 +49,6 @@ def env_config():
 @ex.config
 def agent_config():
     reward_range = (-200., 0.)
-    optim_kwargs = None
     history_length = None
     hidden_sizes = (100, 100,)
     activation = torch.nn.ReLU()
@@ -65,7 +64,9 @@ def train_config():
     train_mcts_mode = "mean"
     train_c_puct = 1.0
 
-    train_steps = 100000
+    train_steps = 10000
+    learning_rate = 1.0e-4
+    weight_decay = 0.0
 
 
 # noinspection PyUnusedLocal
