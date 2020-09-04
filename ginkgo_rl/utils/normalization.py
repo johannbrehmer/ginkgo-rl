@@ -24,4 +24,4 @@ class AffineNormalizer():
     def evaluate(self, value):
         if self._hard_min is not None or self._hard_max is not None:
             value = np.clip(value, self._hard_min, self._hard_max)
-        return (value - self._min) / (self._max - self._min)
+        return np.clip((value - self._min) / (self._max - self._min), 0.0, 1.0)

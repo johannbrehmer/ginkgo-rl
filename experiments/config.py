@@ -4,6 +4,7 @@ from sacred import Experiment
 from sacred.observers import FileStorageObserver, MongoObserver
 
 ex = Experiment(name="rl-ginkgo")
+__all__ = ["ex", "config", "env_config", "agent_config", "train_config", "eval_config", "baseline_config", "technical_config"]
 
 
 # noinspection PyUnusedLocal
@@ -65,7 +66,8 @@ def train_config():
     train_c_puct = 1.0
 
     train_steps = 10000
-    learning_rate = 1.0e-4
+    learning_rate = 1.0e-3
+    lr_decay = 0.01
     weight_decay = 0.0
 
 

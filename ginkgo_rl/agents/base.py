@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 class Agent(nn.Module):
     """ Abstract base agent class """
 
-    def __init__(self, env, gamma=1.00, lr=1.0e-3, weight_decay=0.0, history_length=None, dtype=torch.float, device=torch.device("cpu"), *args, **kwargs):
+    def __init__(self, env, gamma=1.00, lr=1.0e-3, lr_decay=0.01, weight_decay=0.0, history_length=None, dtype=torch.float, device=torch.device("cpu"), *args, **kwargs):
         self.env = env
         self.gamma = gamma
         self.device = device
@@ -24,6 +24,7 @@ class Agent(nn.Module):
         self._init_replay_buffer(history_length)
         self.optimizer = None
         self.lr = lr
+        self.lr_decay = lr_decay
         self.weight_decay = weight_decay
 
         super().__init__()
@@ -36,8 +37,10 @@ class Agent(nn.Module):
         self.train()
         if list(self.parameters()):
             self.optimizer = torch.optim.Adam(params=self.parameters(), lr=self.lr, weight_decay=self.weight_decay)
+            self.scheduler = torch.optim.lr_scheduler.ExponentialLR(self.optimizer, gamma=self.lr_decay**(1. / total_timesteps))
         else:
             self.optimizer = None  # For non-NN methods
+            self.scheduler = None
 
         state = self.env.reset()
         reward = 0.
@@ -120,6 +123,7 @@ class Agent(nn.Module):
         self.optimizer.zero_grad()
         loss.backward()
         self.optimizer.step()
+        self.scheduler.step()
 
     def _find_legal_actions(self, state):
         # Compatibility with torch tensors and numpy arrays

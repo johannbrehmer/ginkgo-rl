@@ -265,7 +265,7 @@ class BaseMCTSAgent(Agent):
         logger.debug(f"Starting MCTS with {n} trajectories")
 
         for i in range(n):
-            if self.verbose: logger.debug(f"Initializing MCTS trajectory {i+1} / {n}")
+            if self.verbose > 1: logger.debug(f"Initializing MCTS trajectory {i+1} / {n}")
             node = self.mcts_head
             total_reward = self.episode_reward
 
@@ -273,11 +273,11 @@ class BaseMCTSAgent(Agent):
                 # Parse current state
                 this_state, total_reward, terminal = self._parse_path(state, node.path)
                 node.set_terminal(terminal)
-                if self.verbose: logger.debug(f"  Node {node.path}")
+                if self.verbose > 1: logger.debug(f"  Node {node.path}")
 
                 # Termination
                 if terminal:
-                    if self.verbose: logger.debug(f"  Node is terminal")
+                    if self.verbose > 1: logger.debug(f"  Node is terminal")
                     break
 
                 # Expand
@@ -287,17 +287,17 @@ class BaseMCTSAgent(Agent):
                         logger.warning("Could not find legal actions! Treating state as terminal.")
                         break
 
-                    if self.verbose: logger.debug(f"    Expanding: {len(actions)} legal actions")
+                    if self.verbose > 1: logger.debug(f"    Expanding: {len(actions)} legal actions")
                     node.expand(actions)
 
                 # Select
                 policy_probs = self._evaluate_policy(this_state, node.children.keys())
                 action = node.select_puct(policy_probs, mode=self.mcts_mode, c_puct=self.c_puct)
-                if self.verbose: logger.debug(f"    Selecting action {action}")
+                if self.verbose > 1: logger.debug(f"    Selecting action {action}")
                 node = node.children[action]
 
             # Backup
-            if self.verbose: logger.debug(f"  Backing up total reward of {total_reward}")
+            if self.verbose > 1: logger.debug(f"  Backing up total reward of {total_reward}")
             node.give_reward(total_reward, backup=True)
 
         # Select best action
@@ -305,19 +305,27 @@ class BaseMCTSAgent(Agent):
         info = {"log_prob": torch.log(self._evaluate_policy(state, self._find_legal_actions(state), action=action))}
 
         # Debug output
-        probs_ =  self._evaluate_policy(state, self._find_legal_actions(state))
-        logger.debug("MCTS results:")
-        for i, (action_, node_) in enumerate(self.mcts_head.children.items()):
-            chosen = 'x' if action_ == action else ' '
-            logger.debug(
-                f"  {chosen} {action_:>3d}: "
-                f"p = {probs_[i].detach().item():.2f}, "
-                f"n = {node_.n:>3d}, "
-                f"q = {node_.q / (node_.n + 1.e-9):>5.1f}, "
-                f"nmq = {node_.get_reward():>4.2f}"
-            )
+        if self.verbose > 0: self._report_decision(action, state)
 
         return action, info
+
+    def _report_decision(self, chosen_action, state):
+        legal_actions = self._find_legal_actions(state)
+        probs = self._evaluate_policy(state, legal_actions)
+        log_likelihoods = [self._parse_action(action_) for action_ in legal_actions]
+
+        logger.debug("MCTS results:")
+        for i, (action_, node_) in enumerate(self.mcts_head.children.items()):
+            is_chosen = '*' if action_ == chosen_action else ' '
+            is_greedy = 'g' if action_ == np.argmax(log_likelihoods) else ' '
+            logger.debug(
+                f" {is_chosen}{is_greedy} {action_:>2d}: "
+                f"log likelihood = {log_likelihoods[i]:5.1f}, "
+                f"policy = {probs[i].detach().item():.2f}, "
+                f"n = {node_.n:>2d}, "
+                f"mean = {node_.q / (node_.n + 1.e-9):>5.1f} [{node_.get_reward():>4.2f}], "
+                f"max = {node_.q_max:>5.1f} [{node_.get_reward(mode='max'):>4.2f}]"
+            )
 
     def _evaluate_policy(self, state, legal_actions, action=None):
         """ Evaluates the policy on the state and returns the probabilities for a given action or all legal actions """
