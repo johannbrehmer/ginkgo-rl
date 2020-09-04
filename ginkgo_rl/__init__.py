@@ -1,3 +1,3 @@
 from .envs import GinkgoLikelihoodEnv, GinkgoLikelihood1DEnv  # , GinkgoLikelihoodShuffledEnv, GinkgoLikelihoodShuffled1DEnv
 from .eval import GinkgoEvaluator
-from .agents import BatchedACERAgent, RandomMCTSAgent, MCTSAgent, GreedyAgent, RandomAgent
+from .agents import BatchedACERAgent, RandomMCTSAgent, MCTSAgent, GreedyAgent, RandomAgent, MCBSAgent

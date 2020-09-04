@@ -7,9 +7,9 @@ import os
 import numpy as np
 
 sys.path.append("../")
-from experiments.config import ex, config, env_config, agent_config, train_config, technical_config, baseline_config
+from experiments.config import ex, config, env_config, agent_config, train_config, technical_config
 from ginkgo_rl import GinkgoLikelihood1DEnv, GinkgoLikelihoodEnv
-from ginkgo_rl import MCTSAgent, GreedyAgent, RandomAgent
+from ginkgo_rl import MCTSAgent, GreedyAgent, RandomAgent, MCBSAgent
 from ginkgo_rl import GinkgoEvaluator
 
 logger = logging.getLogger(__name__)
@@ -107,7 +107,7 @@ def create_env(
 
 @ex.capture
 def create_agent(
-    env, algorithm, reward_range, history_length, train_n_mc_target, train_n_mc_min, train_n_mc_max, train_mcts_mode, train_c_puct, device, dtype, learning_rate, weight_decay
+    env, algorithm, reward_range, history_length, train_n_mc_target, train_n_mc_min, train_n_mc_max, train_mcts_mode, train_c_puct, device, dtype, learning_rate, weight_decay, train_beamsize
 ):
     logger.info(f"Setting up {algorithm} agent ")
 
@@ -125,6 +125,22 @@ def create_agent(
             dtype=dtype,
             lr=learning_rate,
             weight_decay=weight_decay,
+        )
+    elif algorithm == "mcbs":
+        agent = MCBSAgent(
+            env,
+            reward_range=reward_range,
+            history_length=history_length,
+            n_mc_target=train_n_mc_target,
+            n_mc_min=train_n_mc_min,
+            n_mc_max=train_n_mc_max,
+            mcts_mode=train_mcts_mode,
+            c_puct=train_c_puct,
+            device=device,
+            dtype=dtype,
+            lr=learning_rate,
+            weight_decay=weight_decay,
+            beam_size=train_beamsize
         )
     elif algorithm == "greedy":
         agent = GreedyAgent(env, device=device, dtype=dtype)
@@ -174,7 +190,7 @@ def train(env, agent, algorithm, train_n_mc_target, train_n_mc_min, train_n_mc_m
 
 
 @ex.capture
-def eval(agent, name, algorithm, env_type, eval_n_mc_target, eval_n_mc_min, eval_n_mc_max, eval_mcts_mode, eval_c_puct, eval_repeats, eval_jets, eval_filename, eval_figure_path, redraw_eval_jets, beamsize, _run):
+def eval(agent, name, algorithm, env_type, eval_n_mc_target, eval_n_mc_min, eval_n_mc_max, eval_mcts_mode, eval_c_puct, eval_repeats, eval_jets, eval_filename, eval_figure_path, redraw_eval_jets, eval_beamsize, _run):
     # Set up evaluator
     logger.info("Starting evaluation")
     os.makedirs(os.path.dirname(eval_filename), exist_ok=True)
@@ -199,7 +215,7 @@ def eval(agent, name, algorithm, env_type, eval_n_mc_target, eval_n_mc_min, eval
         log_likelihood, errors = evaluator.eval(name, agent, env_name=env_name, n_repeats=1)
 
     elif algorithm == "beamsearch":
-        log_likelihood, errors = evaluator.eval_beam_search(name, beam_size=beamsize)
+        log_likelihood, errors = evaluator.eval_beam_search(name, beam_size=eval_beamsize)
 
     elif algorithm == "truth":
         log_likelihood, errors = evaluator.eval_true("Truth")

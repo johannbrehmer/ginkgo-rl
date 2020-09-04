@@ -1,135 +1,15 @@
-from collections import OrderedDict
 import torch
 from torch import nn
-import random
 import copy
 import logging
 import numpy as np
+from collections import deque
 
+from ginkgo_rl.utils.mcts import MCTSNode
 from .base import Agent
-from ..utils.normalization import AffineNormalizer
 from ..utils.nets import MultiHeadedMLP
 
 logger = logging.getLogger(__name__)
-
-
-class MCTSNode:
-    # TODO: temperature selection with probability ~ n(a)^(1/temperature)
-
-    def __init__(self, parent, path, reward_normalizer=None, reward_min=None, reward_max=None):
-        self.parent = parent
-        self.path = path
-        self.children = OrderedDict()
-        self.reward_min = reward_min
-        self.reward_max = reward_max
-        self.reward_normalizer = AffineNormalizer(hard_min=reward_min, hard_max=reward_max) if reward_normalizer is None else reward_normalizer
-        self.terminal = None  # None means undetermined
-
-        self.q = 0.0  # Total reward
-        self.q_max = -float("inf")  # Highest reward encountered in this node
-        self.n = 0  # Total visit count
-
-    def expand(self, actions):
-        self.terminal = False
-
-        for action in actions:
-            if action in self.children:
-                continue
-
-            self.children[action] = MCTSNode(self, self.path + [action], self.reward_normalizer, reward_min=self.reward_min, reward_max=self.reward_max)
-
-    def set_terminal(self, terminal):
-        self.terminal = terminal
-
-    def give_reward(self, reward, backup=True):
-        reward = np.clip(reward, self.reward_min, self.reward_max)
-
-        self.q_max = max(self.q_max, reward)
-        self.q += reward
-        self.n += 1
-        self.reward_normalizer.update(reward)
-
-        if backup and self.parent:
-            self.parent.give_reward(reward, backup=True)
-
-    def get_reward(self, mode="mean"):
-        """ Returns normalized mean reward (for `mode=="mean"`) or best reward (for `mode=="max"`) """
-        assert mode in ["mean", "max"]
-
-        if mode == "max":
-            try:
-                return self.reward_normalizer.evaluate(self.q_max)
-            except TypeError:  # Happens with un-initializded normalizer
-                return 0.5
-        else:
-            if self.n > 0:
-                return self.reward_normalizer.evaluate(self.q / self.n)
-            elif self.parent is not None:
-                return self.parent.get_reward(mode)
-            else:
-                return 0.5
-
-    def select_random(self):
-        assert self.children and not self.terminal
-        return random.choice(list(self.children.keys()))
-
-    def select_puct(self, policy_probs=None, mode="mean", c_puct=1.0):
-        assert self.children and not self.terminal
-
-        pucts = self._compute_pucts(policy_probs, mode=mode, c_puct=c_puct)
-        assert len(pucts) > 0
-
-        # Pick highest
-        best_puct = - float("inf")
-        choice = None
-        for i, puct in enumerate(pucts):
-            if puct > best_puct:
-                best_puct = puct
-                choice = i
-
-        assert choice is not None
-        return list(self.children.keys())[choice]
-
-    def select_best(self, mode="max"):
-        best_q = - float("inf")
-        choice = None
-
-        for action, child in self.children.items():
-            q = child.get_reward(mode=mode)
-            if q > best_q:
-                best_q = q
-                choice = action
-
-        assert choice is not None
-        return choice
-
-    def prune(self):
-        """ Steps into a subtree and updates all paths (and the new root's parent link) """
-        self.path = self.path[1:]
-        if len(self.path) == 0:
-            self.parent = None
-
-        for child in self.children.values():
-            child.prune()
-
-    def _compute_pucts(self, policy_probs=None, mode="mean", c_puct=1.0):
-        if policy_probs is None:  # By default assume a uniform policy
-            policy_probs = 1. / len(self)
-
-        assert len(policy_probs) == len(self) > 0
-
-        n_children = torch.tensor([child.n for child in self.children.values()], dtype=policy_probs.dtype)
-        q_children = torch.tensor([child.get_reward(mode=mode) for child in self.children.values()], dtype=policy_probs.dtype)
-        pucts = q_children + c_puct * policy_probs * (self.n + 1.e-9) ** 0.5 / (1. + n_children)
-
-        assert len(n_children) == len(self) > 0
-        assert len(q_children) == len(self) > 0
-        assert len(pucts) == len(self) > 0
-
-        return pucts
-
-    def __len__(self):
-        return len(self.children)
 
 
 class BaseMCTSAgent(Agent):
@@ -283,15 +163,12 @@ class BaseMCTSAgent(Agent):
                 # Expand
                 if not node.children:
                     actions = self._find_legal_actions(this_state)
-                    if not actions:
-                        logger.warning("Could not find legal actions! Treating state as terminal.")
-                        break
-
+                    step_rewards = [self._parse_action(action) for action in actions]
                     if self.verbose > 1: logger.debug(f"    Expanding: {len(actions)} legal actions")
-                    node.expand(actions)
+                    node.expand(actions, step_rewards=step_rewards)
 
                 # Select
-                policy_probs = self._evaluate_policy(this_state, node.children.keys())
+                policy_probs = self._evaluate_policy(this_state, node.children.keys(), step_rewards=node.children_q_steps())
                 action = node.select_puct(policy_probs, mode=self.mcts_mode, c_puct=self.c_puct)
                 if self.verbose > 1: logger.debug(f"    Selecting action {action}")
                 node = node.children[action]
@@ -302,32 +179,31 @@ class BaseMCTSAgent(Agent):
 
         # Select best action
         action = self.mcts_head.select_best(mode="max")
-        info = {"log_prob": torch.log(self._evaluate_policy(state, self._find_legal_actions(state), action=action))}
+        info = {"log_prob": torch.log(self._evaluate_policy(state, self._find_legal_actions(state), step_rewards=self.mcts_head.children_q_steps(), action=action))}
 
         # Debug output
         if self.verbose > 0: self._report_decision(action, state)
 
         return action, info
 
-    def _report_decision(self, chosen_action, state):
+    def _report_decision(self, chosen_action, state, label="MCTS"):
         legal_actions = self._find_legal_actions(state)
         probs = self._evaluate_policy(state, legal_actions)
-        log_likelihoods = [self._parse_action(action_) for action_ in legal_actions]
 
-        logger.debug("MCTS results:")
+        logger.debug(f"{label} results:")
         for i, (action_, node_) in enumerate(self.mcts_head.children.items()):
             is_chosen = '*' if action_ == chosen_action else ' '
-            is_greedy = 'g' if action_ == np.argmax(log_likelihoods) else ' '
+            is_greedy = 'g' if action_ == np.argmax(self.mcts_head.children_q_steps()) else ' '
             logger.debug(
                 f" {is_chosen}{is_greedy} {action_:>2d}: "
-                f"log likelihood = {log_likelihoods[i]:5.1f}, "
+                f"log likelihood = {node_.q_step:5.1f}, "
                 f"policy = {probs[i].detach().item():.2f}, "
                 f"n = {node_.n:>2d}, "
                 f"mean = {node_.q / (node_.n + 1.e-9):>5.1f} [{node_.get_reward():>4.2f}], "
                 f"max = {node_.q_max:>5.1f} [{node_.get_reward(mode='max'):>4.2f}]"
             )
 
-    def _evaluate_policy(self, state, legal_actions, action=None):
+    def _evaluate_policy(self, state, legal_actions, step_rewards=None, action=None):
         """ Evaluates the policy on the state and returns the probabilities for a given action or all legal actions """
         raise NotImplementedError
 
@@ -357,8 +233,8 @@ class MCTSAgent(BaseMCTSAgent):
         self.actor = MultiHeadedMLP(1 + int(self.log_likelihood_feature) + self.state_length, hidden_sizes=hidden_sizes, head_sizes=(1,), activation=activation, head_activations=(None,))
         self.softmax = nn.Softmax(dim=0)
 
-    def _evaluate_policy(self, state, legal_actions, action=None):
-        batch_states = self._batch_state(state, legal_actions)
+    def _evaluate_policy(self, state, legal_actions, step_rewards=None, action=None):
+        batch_states = self._batch_state(state, legal_actions, step_rewards=step_rewards)
         (probs,) = self.actor(batch_states)
         probs = self.softmax(probs).flatten()
 
@@ -368,15 +244,19 @@ class MCTSAgent(BaseMCTSAgent):
 
         return probs
 
-    def _batch_state(self, state, legal_actions):
+    def _batch_state(self, state, legal_actions, step_rewards=None):
         state_ = state.view(-1)
 
+        if step_rewards is None:
+            step_rewards = [None for _ in legal_actions]
         batch_states = []
-        for action in legal_actions:
+
+        for action, log_likelihood in zip(legal_actions, step_rewards):
             action_ = torch.tensor([action]).to(self.device, self.dtype)
 
             if self.log_likelihood_feature:
-                log_likelihood = self._parse_action(action)
+                if log_likelihood is None:
+                    log_likelihood = self._parse_action(action)
                 log_likelihood = np.clip(log_likelihood, self.reward_range[0], self.reward_range[1])
                 log_likelihood_ = torch.tensor([log_likelihood]).to(self.device, self.dtype)
                 batch_states.append(torch.cat((action_, log_likelihood_, state_), dim=0).unsqueeze(0))
@@ -398,3 +278,79 @@ class MCTSAgent(BaseMCTSAgent):
         self._gradient_step(loss)
 
         return loss.item()
+
+
+class MCBSAgent(MCTSAgent):
+    """
+    Beam search / MCTS hybrid
+
+    Runs beam search, then MCTS
+    """
+
+    def __init__(self, *args, beam_size=10, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.beam_size = beam_size
+
+    def _predict(self, state):
+        self._beam_search(state)
+        action, info = self._mcts(state)
+        return action, info
+
+    def _beam_search(self, state):
+        """ Expands MCTS tree using beam search """
+
+        beam = [(self.episode_reward, self.mcts_head)]
+        next_beam = []
+
+        def format_beam():
+            return [node.path for _, node in beam]
+
+        logger.debug(f"Starting beam search with beam size {self.beam_size}. Initial beam: {format_beam()}")
+
+        while beam or next_beam:
+            for i, (_, node) in enumerate(beam):
+                # Parse current state
+                this_state, total_reward, terminal = self._parse_path(state, node.path)
+                node.set_terminal(terminal)
+                logger.debug(f"  Analyzing node {i+1} / {len(beam)} on beam: {node.path}")
+
+                # Expand
+                if not node.terminal and not node.children:
+                    actions = self._find_legal_actions(this_state)
+                    step_rewards = [self._parse_action(action) for action in actions]
+                    if self.verbose > 1: logger.debug(f"    Expanding: {len(actions)} legal actions")
+                    node.expand(actions, step_rewards=step_rewards)
+
+                # If terminal, backup reward
+                if node.terminal:
+                    if self.verbose > 1: logger.debug(f"    Node is terminal")
+                    if self.verbose > 1: logger.debug(f"    Backing up total reward {total_reward}")
+                    node.give_reward(total_reward, backup=True)
+
+                # Did we already process this one? Then skip it
+                n_beam_children = node.count_beam_children()
+                if n_beam_children >= min(self.beam_size, len(node)):
+                    if self.verbose > 1: logger.debug(f"    Already beam searched this node sufficiently")
+                    continue
+                else:
+                    if self.verbose > 1: logger.debug(f"    So far {n_beam_children} children were beam searched")
+
+                # Beam search selection
+                for action in node.select_beam_search(self.beam_size, exclude_beam_tagged=True):
+                    next_reward = total_reward + node.children[action].q_step
+                    next_node = node.children[action]
+                    next_beam.append((next_reward, next_node))
+
+                # Mark as visited
+                node.in_beam = True
+
+            # Just keep top entries for next step
+            beam = sorted(next_beam, key=lambda x: x[0], reverse=True)[:self.beam_size]
+            logger.debug(f"Preparing next step, keeping {self.beam_size} / {len(next_beam)} nodes in beam: {format_beam()}")
+            next_beam = []
+
+        logger.debug(f"Finished beam search")
+
+        if self.verbose > 0:
+            choice = self.mcts_head.select_best(mode="max")
+            self._report_decision(choice, state, "Beam search")

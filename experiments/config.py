@@ -61,6 +61,7 @@ def train_config():
     train_n_mc_target = 5
     train_n_mc_min = 5
     train_n_mc_max = 100
+    train_beamsize = 10
 
     train_mcts_mode = "mean"
     train_c_puct = 1.0
@@ -79,6 +80,7 @@ def eval_config():
     eval_n_mc_max = 250
     eval_mcts_mode = "mean"
     eval_c_puct = 1.0
+    eval_beamsize = 10
 
     eval_jets = 8
     eval_repeats = 100
@@ -87,12 +89,6 @@ def eval_config():
     eval_figure_path = "./figures/"
 
     redraw_eval_jets = False
-
-
-# noinspection PyUnusedLocal
-@ex.config
-def baseline_config():
-    beamsize=10
 
 
 # noinspection PyUnusedLocal
