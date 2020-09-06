@@ -82,12 +82,9 @@ def eval_config():
     eval_c_puct = 1.0
     eval_beamsize = 10
 
-    eval_jets = 8
-    eval_repeats = 100
-
+    eval_jets = 100
+    eval_repeats = 1
     eval_filename = "./data/eval/eval.pickle"
-    eval_figure_path = "./figures/"
-
     redraw_eval_jets = False
 
 

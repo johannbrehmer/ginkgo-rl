@@ -190,53 +190,51 @@ def train(env, agent, algorithm, train_n_mc_target, train_n_mc_min, train_n_mc_m
 
 
 @ex.capture
-def eval(agent, name, algorithm, env_type, eval_n_mc_target, eval_n_mc_min, eval_n_mc_max, eval_mcts_mode, eval_c_puct, eval_repeats, eval_jets, eval_filename, eval_figure_path, redraw_eval_jets, eval_beamsize, _run):
+def eval(agent, env, name, algorithm, eval_n_mc_target, eval_n_mc_min, eval_n_mc_max, eval_mcts_mode, eval_c_puct, eval_repeats, eval_jets, eval_filename, redraw_eval_jets, eval_beamsize, _run):
     # Set up evaluator
     logger.info("Starting evaluation")
     os.makedirs(os.path.dirname(eval_filename), exist_ok=True)
-    os.makedirs(eval_figure_path, exist_ok=True)
-    evaluator = GinkgoEvaluator(filename=eval_filename, n_jets=eval_jets, redraw_existing_jets=redraw_eval_jets)
+    evaluator = GinkgoEvaluator(env=env, filename=eval_filename, n_jets=eval_jets, redraw_existing_jets=redraw_eval_jets)
+    jet_sizes = evaluator.get_jet_info()["n_leaves"]
 
     # Evaluate
-    if algorithm == "mcts":
+    if algorithm in ["mcts", "mcbs", "random"]:
         try:
             agent.set_precision(eval_n_mc_target, eval_n_mc_min, eval_n_mc_max, eval_mcts_mode, eval_c_puct)
         except:
             pass
-        env_name = "GinkgoLikelihood1D-v0" if env_type=="1d" else "GinkgoLikelihood-v0"
-        log_likelihood, errors = evaluator.eval(name, agent, env_name=env_name, n_repeats=eval_repeats)
-
-    elif algorithm == "random":
-        env_name = "GinkgoLikelihood1D-v0" if env_type=="1d" else "GinkgoLikelihood-v0"
-        log_likelihood, errors = evaluator.eval(name, agent, env_name=env_name, n_repeats=eval_repeats)
-
+        log_likelihood, errors = evaluator.eval(name, agent, n_repeats=eval_repeats)
     elif algorithm == "greedy":
-        env_name = "GinkgoLikelihood1D-v0" if env_type=="1d" else "GinkgoLikelihood-v0"
-        log_likelihood, errors = evaluator.eval(name, agent, env_name=env_name, n_repeats=1)
-
+        log_likelihood, errors = evaluator.eval(name, agent, n_repeats=1)
     elif algorithm == "beamsearch":
         log_likelihood, errors = evaluator.eval_beam_search(name, beam_size=eval_beamsize)
-
     elif algorithm == "truth":
         log_likelihood, errors = evaluator.eval_true("Truth")
-
     elif algorithm == "mle":
         log_likelihood, errors = evaluator.eval_exact_trellis("MLE (Trellis)")
+    else:
+        raise ValueError(algorithm)
 
-    # Mean results
-    log_likelihood = float(np.mean(np.array(log_likelihood).flatten()))
-    errors = float(np.mean(np.array(errors).flatten()))
+    # Store results
+    folder = f"./data/runs/{run_name}"
+    logger.info(f"Storing results in {folder}")
+    np.save(f"{folder}/eval_log_likelihood.npy", log_likelihood)
+    np.save(f"{folder}/eval_illegal_actions.npy", errors)
+    np.save(f"{folder}/eval_jet_sizes.npy", jet_sizes)
+    ex.add_artifact(f"{folder}/eval_log_likelihood.npy")
+    ex.add_artifact(f"{folder}/eval_illegal_actions.npy")
+    ex.add_artifact(f"{folder}/eval_jet_sizes.npy")
 
     # Log results
-    _run.log_scalar("eval_log_likelihood", log_likelihood)
-    _run.log_scalar("eval_illegal_actions", errors)
+    mean_log_likelihood = float(np.mean(np.array(log_likelihood).flatten()))
+    mean_errors = float(np.mean(np.array(errors).flatten()))
+    _run.log_scalar("eval_log_likelihood", mean_log_likelihood)
+    _run.log_scalar("eval_illegal_actions", mean_errors)
+    logger.info("Eval results:")
+    logger.info(f"  Mean log likelihood: {mean_log_likelihood}")
+    logger.info(f"  Mean illegal actions: {mean_errors}")
 
-    # Print and plot results
-    logger.info("Results:")
-    print(evaluator)
-    evaluator.plot_log_likelihoods(filename=f"{eval_figure_path}/{name}.pdf")
-
-    return log_likelihood
+    return mean_log_likelihood
 
 
 @ex.capture

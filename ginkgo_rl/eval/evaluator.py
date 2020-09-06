@@ -17,22 +17,18 @@ import beamSearchOptimal_invM as beam_search
 
 
 class GinkgoEvaluator():
-    def __init__(self, filename, redraw_existing_jets=False, n_jets=8, auto_eval_truth_mle=False):
+    def __init__(self, filename, env, redraw_existing_jets=False, n_jets=100):
         self.filename = filename
 
         if os.path.exists(filename) and not redraw_existing_jets:
             self._load()
         else:
             self.n_jets = n_jets
-            self.jets = self._init_jets()
+            self.jets = self._init_jets(env)
+            self._save()
             self.methods = []  # Method names
             self.log_likelihoods = {}  # Log likelihood results
             self.illegal_actions = {}  # Number of illegal actions
-            self._save()
-
-            if auto_eval_truth_mle:
-                self.eval_true("Truth")
-                self.eval_exact_trellis("MLE (Trellis)")
 
     def eval_true(self, method):
         log_likelihoods = [[self._compute_true_log_likelihood(jet)] for jet in self.jets]
@@ -52,9 +48,7 @@ class GinkgoEvaluator():
         self._update_results(method, log_likelihoods, illegal_actions)
         return log_likelihoods, illegal_actions
 
-    def eval(self, method, model, env_name, n_repeats=100):
-        env = self._init_env(env_name)
-
+    def eval(self, method, model, n_repeats=1):
         log_likelihoods = [[] for _ in range(self.n_jets)]
         illegal_actions = [[] for _ in range(self.n_jets)]
 
@@ -62,16 +56,19 @@ class GinkgoEvaluator():
             i_jet = i // n_repeats
             jet = self.jets[i_jet]
 
-            env.set_internal_state(jet)
-            log_likelihood, error = self._episode(model, env)
+            self.env.set_internal_state(jet)
+            log_likelihood, error = self._episode(model, self.env)
             log_likelihoods[i_jet].append(log_likelihood)
             illegal_actions[i_jet].append(error)
 
         self._update_results(method, log_likelihoods, illegal_actions)
         return log_likelihoods, illegal_actions
 
-    def eval_random(self, method, env_name, n_repeats=100):
-        return self.eval(method, None, env_name, n_repeats)
+    def eval_random(self, method, n_repeats=1):
+        return self.eval(method, None, n_repeats)
+
+    def get_jet_info(self):
+        return {"n_leaves": np.array([len(jet["leaves"]) for jet in self.jets], dtype=np.int)}
 
     def get_results(self):
         for method in self.methods:
@@ -143,19 +140,11 @@ class GinkgoEvaluator():
         return fig
 
     def _update_results(self, method, log_likelihoods, illegal_actions):
-        self._load()  # Just in case another process changed the data in the file in the mean time
-
-        while method in self.methods:
-            self.methods.remove(method)
-        self.methods.append(method)
-
         self.log_likelihoods[method] = log_likelihoods
         self.illegal_actions[method] = illegal_actions
 
-        self._save()
-
     def _save(self):
-        data = {"n_jets": self.n_jets, "jets": self.jets, "methods": self.methods, "log_likelihoods": self.log_likelihoods, "illegal_actions": self.illegal_actions}
+        data = {"n_jets": self.n_jets, "jets": self.jets}
         with open(self.filename, 'wb') as file:
             pickle.dump(data, file)
 
@@ -165,35 +154,18 @@ class GinkgoEvaluator():
 
         self.n_jets = data["n_jets"]
         self.jets = data["jets"]
-        self.methods = data["methods"]
-        self.log_likelihoods = data["log_likelihoods"]
-        self.illegal_actions = data["illegal_actions"]
-
-    def _init_env(self, env_name="GinkgoLikelihood-v0"):
-        if env_name == "GinkgoLikelihood-v0":
-            env = GinkgoLikelihoodEnv(min_reward=None, illegal_reward=0., illegal_actions_patience=3)
-        elif env_name == "GinkgoLikelihood1D-v0":
-            env = GinkgoLikelihood1DEnv(min_reward=None, illegal_reward=0., illegal_actions_patience=3)
-        else:
-            raise ValueError(env_name)
-
-        env.reset()
-        return env
 
     def _init_jets(self):
-        env = self._init_env()
         jets = []
 
         for _ in range(self.n_jets):
-            env.reset()
-            jets.append(env.get_internal_state())
+            self.env.reset()
+            jets.append(self.env.get_internal_state())
 
-        env.close()
         return jets
 
-    @staticmethod
-    def _episode(model, env):
-        state = env.get_state()
+    def _episode(self, model):
+        state = self.env.get_state()
         done = False
         log_likelihood = 0.
         errors = 0
@@ -201,17 +173,17 @@ class GinkgoEvaluator():
 
         # Point model to correct env: this only works for *our* models, not the baselines
         try:
-            model.set_env(env)
+            model.set_env(self.env)
         except:
             pass
 
         while not done:
             if model is None:
-                action = env.action_space.sample()
+                action = self.env.action_space.sample()
                 agent_info = {}
             else:
                 action, agent_info = model.predict(state)
-            next_state, next_reward, done, info = env.step(action)
+            next_state, next_reward, done, info = self.env.step(action)
 
             log_likelihood += next_reward
             if not info["legal"]:
@@ -246,6 +218,6 @@ class GinkgoEvaluator():
             delta_min=jet[0]["pt_cut"],
             lam=float(jet[0]["Lambda"]),
             N_best=1,
-            visualize=True,  # TODO: figure out why this is necessary
+            visualize=True,
         )[0]
         return sum(bs_jet["logLH"])
