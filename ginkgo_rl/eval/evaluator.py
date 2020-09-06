@@ -5,6 +5,7 @@ import sys
 import os
 from tqdm import trange
 import pickle
+import logging
 
 from ginkgo_rl import GinkgoLikelihoodEnv, GinkgoLikelihood1DEnv
 
@@ -15,20 +16,24 @@ from run_physics_experiment_invM import compare_map_gt_and_bs_trees as compute_t
 sys.path.insert(0, "/Users/johannbrehmer/work/projects/shower_rl/ReclusterTreeAlgorithms/scripts")
 import beamSearchOptimal_invM as beam_search
 
+logger = logging.getLogger(__name__)
+
 
 class GinkgoEvaluator():
     def __init__(self, filename, env, redraw_existing_jets=False, n_jets=100):
         self.filename = filename
+        self.env = env
+
+        self.methods = []  # Method names
+        self.log_likelihoods = {}  # Log likelihood results
+        self.illegal_actions = {}  # Number of illegal actions
 
         if os.path.exists(filename) and not redraw_existing_jets:
             self._load()
         else:
             self.n_jets = n_jets
-            self.jets = self._init_jets(env)
+            self.jets = self._init_jets()
             self._save()
-            self.methods = []  # Method names
-            self.log_likelihoods = {}  # Log likelihood results
-            self.illegal_actions = {}  # Number of illegal actions
 
     def eval_true(self, method):
         log_likelihoods = [[self._compute_true_log_likelihood(jet)] for jet in self.jets]
@@ -57,7 +62,7 @@ class GinkgoEvaluator():
             jet = self.jets[i_jet]
 
             self.env.set_internal_state(jet)
-            log_likelihood, error = self._episode(model, self.env)
+            log_likelihood, error = self._episode(model)
             log_likelihoods[i_jet].append(log_likelihood)
             illegal_actions[i_jet].append(error)
 
@@ -68,7 +73,7 @@ class GinkgoEvaluator():
         return self.eval(method, None, n_repeats)
 
     def get_jet_info(self):
-        return {"n_leaves": np.array([len(jet["leaves"]) for jet in self.jets], dtype=np.int)}
+        return {"n_leaves": np.array([len(jet[0]["leaves"]) for jet in self.jets], dtype=np.int)}
 
     def get_results(self):
         for method in self.methods:
@@ -156,11 +161,16 @@ class GinkgoEvaluator():
         self.jets = data["jets"]
 
     def _init_jets(self):
+        logger.info("Generating evaluation jets")
+
         jets = []
 
         for _ in range(self.n_jets):
             self.env.reset()
             jets.append(self.env.get_internal_state())
+
+        sizes = np.array([len(jet[0]["leaves"]) for jet in jets])
+        logger.info(f"  Generated jets with min size {np.min(sizes)}, mean size {np.mean(sizes)}, max size {np.max(sizes)}")
 
         return jets
 
@@ -204,8 +214,11 @@ class GinkgoEvaluator():
         return sum(jet[0]["logLH"])
 
     @staticmethod
-    def _compute_maximum_log_likelihood(jet):
+    def _compute_maximum_log_likelihood(jet, max_leaves=11):
         """ Based on Sebastian's code at https://github.com/iesl/hierarchical-trellis/blob/sebastian/src/Jet_Experiments_invM_exactTrellis.ipynb """
+        if len(jet[0]["leaves"]) > max_leaves:
+            return np.nan
+
         _, _, max_log_likelihood, _, _ = compute_trellis(jet[0])
         return max_log_likelihood
 

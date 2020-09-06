@@ -24,10 +24,10 @@ def config():
 # noinspection PyUnusedLocal
 @ex.config
 def env_config():
-    illegal_reward=-50.0
-    illegal_actions_patience=5
+    illegal_reward=-100.0
+    illegal_actions_patience=3
 
-    n_max=10
+    n_max=20
     n_min=2
     n_target=1
 
@@ -49,7 +49,7 @@ def env_config():
 # noinspection PyUnusedLocal
 @ex.config
 def agent_config():
-    reward_range = (-200., 0.)
+    reward_range = (-500., 0.)
     history_length = None
     hidden_sizes = (100, 100,)
     activation = torch.nn.ReLU()
@@ -82,7 +82,7 @@ def eval_config():
     eval_c_puct = 1.0
     eval_beamsize = 10
 
-    eval_jets = 100
+    eval_jets = 500
     eval_repeats = 1
     eval_filename = "./data/eval/eval.pickle"
     redraw_eval_jets = False
@@ -105,11 +105,11 @@ def debug():
 
     train_steps = 10
     train_beamsize = 2
-    train_n_mc_min = 2
+    train_n_mc_min = 1
     train_n_mc_max = 2
 
     eval_beamsize = 2
-    eval_n_mc_min = 2
+    eval_n_mc_min = 1
     eval_n_mc_max = 2
 
 
@@ -148,14 +148,14 @@ def beamsearch_s():
 def beamsearch_m():
     algorithm = "beamsearch"
     name = "beamsearch_m"
-    eval_beamsize = 10
+    eval_beamsize = 20
 
 
 @ex.named_config
 def beamsearch_l():
     algorithm = "beamsearch"
     name = "beamsearch_l"
-    eval_beamsize = 20
+    eval_beamsize = 100
 
 
 @ex.named_config
@@ -165,10 +165,10 @@ def mcbs_s():
 
     train_beamsize = 5
     eval_beamsize = 5
-    train_n_mc_target = 3
-    eval_n_mc_target = 3
-    train_n_mc_max = 30
-    eval_n_mc_max = 30
+    train_n_mc_target = 2
+    eval_n_mc_target = 2
+    train_n_mc_max = 40
+    eval_n_mc_max = 40
 
 
 @ex.named_config
@@ -176,12 +176,12 @@ def mcbs_m():
     algorithm = "mcbs"
     name = "mcbs_m"
 
-    train_beamsize = 10
-    eval_beamsize = 10
+    train_beamsize = 20
+    eval_beamsize = 20
     train_n_mc_target = 5
     eval_n_mc_target = 5
-    train_n_mc_max = 80
-    eval_n_mc_max = 80
+    train_n_mc_max = 100
+    eval_n_mc_max = 100
 
 
 @ex.named_config
@@ -189,8 +189,8 @@ def mcbs_l():
     algorithm = "mcbs"
     name = "mcbs_l"
 
-    train_beamsize = 20
-    eval_beamsize = 20
+    train_beamsize = 100
+    eval_beamsize = 100
     train_n_mc_target = 10
     eval_n_mc_target = 10
     train_n_mc_max = 200

@@ -190,7 +190,7 @@ def train(env, agent, algorithm, train_n_mc_target, train_n_mc_min, train_n_mc_m
 
 
 @ex.capture
-def eval(agent, env, name, algorithm, eval_n_mc_target, eval_n_mc_min, eval_n_mc_max, eval_mcts_mode, eval_c_puct, eval_repeats, eval_jets, eval_filename, redraw_eval_jets, eval_beamsize, _run):
+def eval(agent, env, name, algorithm, eval_n_mc_target, eval_n_mc_min, eval_n_mc_max, eval_mcts_mode, eval_c_puct, eval_repeats, eval_jets, eval_filename, redraw_eval_jets, eval_beamsize, run_name, _run):
     # Set up evaluator
     logger.info("Starting evaluation")
     os.makedirs(os.path.dirname(eval_filename), exist_ok=True)
@@ -258,7 +258,7 @@ def main():
     train(env, agent)
     save_agent(agent)
 
-    result = eval(agent)
+    result = eval(agent, env)
 
     logger.info(f"That's all, have a nice day!")
     return result
