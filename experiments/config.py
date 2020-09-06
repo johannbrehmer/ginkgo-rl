@@ -10,7 +10,7 @@ __all__ = ["ex", "config", "env_config", "agent_config", "train_config", "eval_c
 # noinspection PyUnusedLocal
 @ex.config
 def config():
-    algorithm = "mcts"  # one of "mcts", "greedy", "random"
+    algorithm = "mcbs"  # one of "mcts", "mcbs", "greedy", "random"
     env_type = "1d"
 
     name = algorithm
@@ -59,8 +59,8 @@ def agent_config():
 @ex.config
 def train_config():
     train_n_mc_target = 5
-    train_n_mc_min = 5
-    train_n_mc_max = 100
+    train_n_mc_min = 1
+    train_n_mc_max = 50
     train_beamsize = 10
 
     train_mcts_mode = "mean"
@@ -76,8 +76,8 @@ def train_config():
 @ex.config
 def eval_config():
     eval_n_mc_target = 10
-    eval_n_mc_min = 10
-    eval_n_mc_max = 250
+    eval_n_mc_min = 1
+    eval_n_mc_max = 100
     eval_mcts_mode = "mean"
     eval_c_puct = 1.0
     eval_beamsize = 10
@@ -95,3 +95,103 @@ def technical_config():
     dtype = torch.float
     seed = 1971248
     debug = False
+
+
+@ex.named_config
+def debug():
+    algorithm = "mcbs"
+    env_type = "1d"
+    name = "mcbs_debug"
+
+    train_steps = 10
+    train_beamsize = 2
+    train_n_mc_min = 2
+    train_n_mc_max = 2
+
+    eval_beamsize = 2
+    eval_n_mc_min = 2
+    eval_n_mc_max = 2
+
+
+@ex.named_config
+def truth():
+    algorithm = "truth"
+    name = "truth"
+
+
+@ex.named_config
+def mle():
+    algorithm = "mle"
+    name = "mle"
+
+
+@ex.named_config
+def random():
+    algorithm = "random"
+    name = "random"
+
+
+@ex.named_config
+def greedy():
+    algorithm = "greedy"
+    name = "greedy"
+
+
+@ex.named_config
+def beamsearch_s():
+    algorithm = "beamsearch"
+    name = "beamsearch_s"
+    eval_beamsize = 5
+
+
+@ex.named_config
+def beamsearch_m():
+    algorithm = "beamsearch"
+    name = "beamsearch_m"
+    eval_beamsize = 10
+
+
+@ex.named_config
+def beamsearch_l():
+    algorithm = "beamsearch"
+    name = "beamsearch_l"
+    eval_beamsize = 20
+
+
+@ex.named_config
+def mcbs_s():
+    algorithm = "mcbs"
+    name = "mcbs_s"
+
+    train_beamsize = 5
+    eval_beamsize = 5
+    train_n_mc_target = 3
+    eval_n_mc_target = 3
+    train_n_mc_max = 30
+    eval_n_mc_max = 30
+
+
+@ex.named_config
+def mcbs_m():
+    algorithm = "mcbs"
+    name = "mcbs_m"
+
+    train_beamsize = 10
+    eval_beamsize = 10
+    train_n_mc_target = 5
+    eval_n_mc_target = 5
+    train_n_mc_max = 80
+    eval_n_mc_max = 80
+
+
+@ex.named_config
+def mcbs_l():
+    algorithm = "mcbs"
+    name = "mcbs_l"
+
+    train_beamsize = 20
+    eval_beamsize = 20
+    train_n_mc_target = 10
+    eval_n_mc_target = 10
+    train_n_mc_max = 200
+    eval_n_mc_max = 200
