@@ -107,7 +107,7 @@ def create_env(
 
 @ex.capture
 def create_agent(
-    env, algorithm, reward_range, history_length, train_n_mc_target, train_n_mc_min, train_n_mc_max, train_mcts_mode, train_c_puct, device, dtype, learning_rate, weight_decay, train_beamsize
+    env, algorithm, reward_range, history_length, train_n_mc_target, train_n_mc_min, train_n_mc_max, train_mcts_mode, train_c_puct, device, dtype, learning_rate, weight_decay, train_beamsize, debug, debug_verbosity
 ):
     logger.info(f"Setting up {algorithm} agent ")
 
@@ -125,6 +125,7 @@ def create_agent(
             dtype=dtype,
             lr=learning_rate,
             weight_decay=weight_decay,
+            verbose=debug_verbosity if debug else 0,
         )
     elif algorithm == "mcbs":
         agent = MCBSAgent(
@@ -140,10 +141,11 @@ def create_agent(
             dtype=dtype,
             lr=learning_rate,
             weight_decay=weight_decay,
-            beam_size=train_beamsize
+            beam_size=train_beamsize,
+            verbose=debug_verbosity if debug else 0,
         )
     elif algorithm == "greedy":
-        agent = GreedyAgent(env, device=device, dtype=dtype)
+        agent = GreedyAgent(env, device=device, dtype=dtype, verbose=debug_verbosity if debug else 0)
     elif algorithm == "random":
         agent = RandomAgent(env, device=device, dtype=dtype)
     elif algorithm in ["truth", "mle", "beamsearch"]:

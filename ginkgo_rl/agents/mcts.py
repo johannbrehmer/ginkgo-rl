@@ -66,6 +66,7 @@ class BaseMCTSAgent(Agent):
 
         # Keep track of total reward
         self.episode_reward += next_reward
+        if self.verbose > 0: logger.debug(f"Agent acknowledges receiving a reward of {next_reward}, episode reward so far {self.episode_reward}")
 
         # MCTS updates
         if done:
@@ -96,6 +97,7 @@ class BaseMCTSAgent(Agent):
         # Store env state state
         if self.sim_env.state is None or not np.all(np.isclose(self.sim_env.state, self.env.state)):
             self.sim_env.set_internal_state(self.env.get_internal_state())
+
         self.sim_env.verbose = False
 
         # Follow path
@@ -113,11 +115,17 @@ class BaseMCTSAgent(Agent):
         state = self._tensorize(state)
         return state, total_reward, terminal
 
-    def _parse_action(self, action):
+    def _parse_action(self, action, from_which_env="sim"):
         """ Given a state and an action, computes the log likelihood """
 
-        if self.sim_env.state is None or not np.all(np.isclose(self.sim_env.state, self.env.state)):
-            self.sim_env.set_internal_state(self.env.get_internal_state())
+        if from_which_env == "real":  # Start in self.env state
+            if self.sim_env.state is None or not np.all(np.isclose(self.sim_env.state, self.env.state)):
+                self.sim_env.set_internal_state(self.env.get_internal_state())
+        elif from_which_env == "sim":  # Use current state of self.sim_env
+            pass
+        else:
+            raise ValueError(mode)
+
         self.sim_env.verbose = False
 
         try:
@@ -147,7 +155,7 @@ class BaseMCTSAgent(Agent):
         for i in range(n):
             if self.verbose > 1: logger.debug(f"Initializing MCTS trajectory {i+1} / {n}")
             node = self.mcts_head
-            total_reward = self.episode_reward
+            total_reward = 0.0
 
             for _ in range(max_steps):
                 # Parse current state
@@ -163,7 +171,7 @@ class BaseMCTSAgent(Agent):
                 # Expand
                 if not node.children:
                     actions = self._find_legal_actions(this_state)
-                    step_rewards = [self._parse_action(action) for action in actions]
+                    step_rewards = [self._parse_action(action, from_which_env="sim") for action in actions]
                     if self.verbose > 1: logger.debug(f"    Expanding: {len(actions)} legal actions")
                     node.expand(actions, step_rewards=step_rewards)
 
@@ -175,7 +183,7 @@ class BaseMCTSAgent(Agent):
 
             # Backup
             if self.verbose > 1: logger.debug(f"  Backing up total reward of {total_reward}")
-            node.give_reward(total_reward, backup=True)
+            node.give_reward(self.episode_reward + total_reward, backup=True)
 
         # Select best action
         action = self.mcts_head.select_best(mode="max")
@@ -196,7 +204,7 @@ class BaseMCTSAgent(Agent):
             is_greedy = 'g' if action_ == np.argmax(self.mcts_head.children_q_steps()) else ' '
             logger.debug(
                 f" {is_chosen}{is_greedy} {action_:>2d}: "
-                f"log likelihood = {node_.q_step:5.1f}, "
+                f"log likelihood = {node_.q_step:6.2f}, "
                 f"policy = {probs[i].detach().item():.2f}, "
                 f"n = {node_.n:>2d}, "
                 f"mean = {node_.q / (node_.n + 1.e-9):>5.1f} [{node_.get_reward():>4.2f}], "
@@ -256,7 +264,7 @@ class MCTSAgent(BaseMCTSAgent):
 
             if self.log_likelihood_feature:
                 if log_likelihood is None:
-                    log_likelihood = self._parse_action(action)
+                    log_likelihood = self._parse_action(action, from_which_env="real")
                 log_likelihood = np.clip(log_likelihood, self.reward_range[0], self.reward_range[1])
                 log_likelihood_ = torch.tensor([log_likelihood]).to(self.device, self.dtype)
                 batch_states.append(torch.cat((action_, log_likelihood_, state_), dim=0).unsqueeze(0))
@@ -292,11 +300,47 @@ class MCBSAgent(MCTSAgent):
         self.beam_size = beam_size
 
     def _predict(self, state):
-        self._beam_search(state)
+        self._greedy(state)  # Greedy
+        self._beam_search(state, beam_size=self.beam_size)  # Beam search
         action, info = self._mcts(state)
         return action, info
 
-    def _beam_search(self, state):
+    def _greedy(self, state):
+        """ Expands MCTS tree using a greedy algorithm """
+
+        node = self.mcts_head
+        if self.verbose > 1: logger.debug(f"Starting greedy algorithm.")
+
+        while not node.terminal:
+            # Parse current state
+            this_state, total_reward, terminal = self._parse_path(state, node.path)
+            node.set_terminal(terminal)
+            if self.verbose > 1: logger.debug(f"  Analyzing node {node.path}")
+
+            # Expand
+            if not node.terminal and not node.children:
+                actions = self._find_legal_actions(this_state)
+                step_rewards = [self._parse_action(action, from_which_env="sim") for action in actions]
+                if self.verbose > 1: logger.debug(f"    Expanding: {len(actions)} legal actions")
+                node.expand(actions, step_rewards=step_rewards)
+
+            # If terminal, backup reward
+            if node.terminal:
+                if self.verbose > 1: logger.debug(f"    Node is terminal")
+                if self.verbose > 1: logger.debug(f"    Backing up total reward {total_reward}")
+                node.give_reward(self.episode_reward + total_reward, backup=True)
+
+            # Greedily select next action
+            if not node.terminal:
+                action = node.select_greedy()
+                node = node.children[action]
+
+        if self.verbose > 0:
+            choice = self.mcts_head.select_best(mode="max")
+            self._report_decision(choice, state, "Greedy")
+
+
+    def _beam_search(self, state, beam_size):
         """ Expands MCTS tree using beam search """
 
         beam = [(self.episode_reward, self.mcts_head)]
@@ -305,19 +349,19 @@ class MCBSAgent(MCTSAgent):
         def format_beam():
             return [node.path for _, node in beam]
 
-        logger.debug(f"Starting beam search with beam size {self.beam_size}. Initial beam: {format_beam()}")
+        if self.verbose > 1: logger.debug(f"Starting beam search with beam size {beam_size}. Initial beam: {format_beam()}")
 
         while beam or next_beam:
             for i, (_, node) in enumerate(beam):
                 # Parse current state
                 this_state, total_reward, terminal = self._parse_path(state, node.path)
                 node.set_terminal(terminal)
-                logger.debug(f"  Analyzing node {i+1} / {len(beam)} on beam: {node.path}")
+                if self.verbose > 1: logger.debug(f"  Analyzing node {i+1} / {len(beam)} on beam: {node.path}")
 
                 # Expand
                 if not node.terminal and not node.children:
                     actions = self._find_legal_actions(this_state)
-                    step_rewards = [self._parse_action(action) for action in actions]
+                    step_rewards = [self._parse_action(action, from_which_env="sim") for action in actions]
                     if self.verbose > 1: logger.debug(f"    Expanding: {len(actions)} legal actions")
                     node.expand(actions, step_rewards=step_rewards)
 
@@ -325,18 +369,18 @@ class MCBSAgent(MCTSAgent):
                 if node.terminal:
                     if self.verbose > 1: logger.debug(f"    Node is terminal")
                     if self.verbose > 1: logger.debug(f"    Backing up total reward {total_reward}")
-                    node.give_reward(total_reward, backup=True)
+                    node.give_reward(self.episode_reward + total_reward, backup=True)
 
                 # Did we already process this one? Then skip it
                 n_beam_children = node.count_beam_children()
-                if n_beam_children >= min(self.beam_size, len(node)):
+                if n_beam_children >= min(beam_size, len(node)):
                     if self.verbose > 1: logger.debug(f"    Already beam searched this node sufficiently")
                     continue
                 else:
                     if self.verbose > 1: logger.debug(f"    So far {n_beam_children} children were beam searched")
 
                 # Beam search selection
-                for action in node.select_beam_search(self.beam_size, exclude_beam_tagged=True):
+                for action in node.select_beam_search(beam_size, exclude_beam_tagged=True):
                     next_reward = total_reward + node.children[action].q_step
                     next_node = node.children[action]
                     next_beam.append((next_reward, next_node))
@@ -345,8 +389,8 @@ class MCBSAgent(MCTSAgent):
                 node.in_beam = True
 
             # Just keep top entries for next step
-            beam = sorted(next_beam, key=lambda x: x[0], reverse=True)[:self.beam_size]
-            logger.debug(f"Preparing next step, keeping {self.beam_size} / {len(next_beam)} nodes in beam: {format_beam()}")
+            beam = sorted(next_beam, key=lambda x: x[0], reverse=True)[:beam_size]
+            if self.verbose > 1: logger.debug(f"Preparing next step, keeping {beam_size} / {len(next_beam)} nodes in beam: {format_beam()}")
             next_beam = []
 
         logger.debug(f"Finished beam search")

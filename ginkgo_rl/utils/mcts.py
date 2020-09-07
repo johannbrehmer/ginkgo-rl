@@ -85,7 +85,7 @@ class MCTSNode:
         best_puct = - float("inf")
         choice = None
         for i, puct in enumerate(pucts):
-            if puct > best_puct:
+            if puct > best_puct or choice is None:
                 best_puct = puct
                 choice = i
 
@@ -98,7 +98,7 @@ class MCTSNode:
 
         for action, child in self.children.items():
             q = child.get_reward(mode=mode)
-            if q > best_q:
+            if q > best_q or choice is None:
                 best_q = q
                 choice = action
 
@@ -110,6 +110,9 @@ class MCTSNode:
         if exclude_beam_tagged:
             choices = [action for action in choices if not self.children[action].in_beam]
         return choices
+
+    def select_greedy(self):
+        return self.select_beam_search(1, exclude_beam_tagged=False)[0]
 
     def prune(self):
         """ Steps into a subtree and updates all paths (and the new root's parent link) """

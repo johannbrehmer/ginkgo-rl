@@ -201,7 +201,7 @@ class GinkgoEvaluator():
 
             # Update model: this only works for *our* models, not the baselines
             try:
-                model.update(state, reward, action, done, next_state, next_reward=reward, num_episode=0, **agent_info)
+                model.update(state, reward, action, done, next_state, next_reward=next_reward, num_episode=0, **agent_info)
             except:
                 pass
 

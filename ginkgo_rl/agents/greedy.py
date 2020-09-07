@@ -10,7 +10,7 @@ class GreedyAgent(Agent):
     def __init__(
         self,
         *args,
-        verbose=False,
+        verbose=0,
         **kwargs
     ):
         super().__init__(*args, **kwargs)
@@ -25,10 +25,19 @@ class GreedyAgent(Agent):
 
     def _predict(self, state):
         best_action, best_reward = None, -float("inf")
+        legal_actions = self._find_legal_actions(state)
+        rewards = []
+
         for action in self._find_legal_actions(state):
             reward = self._parse_action(action)
-            if reward > best_reward:
+            rewards.append(reward)
+
+            if reward > best_reward or best_action is None:
                 best_action, best_reward = action, reward
+
+        if self.verbose > 0:
+            self._report_decision(legal_actions, rewards, best_action)
+
         assert best_action is not None
         return best_action, {}
 
@@ -40,3 +49,12 @@ class GreedyAgent(Agent):
         self.sim_env.verbose = False
         _, reward, _, _ = self.sim_env.step(action)
         return reward
+
+    def _report_decision(self, legal_actions, log_likelihoods, chosen_action):
+        logger.debug(f"Greedy results:")
+        for i, (action_, log_likelihood) in enumerate(zip(legal_actions, log_likelihoods)):
+            is_chosen = '*' if action_ == chosen_action else ' '
+            logger.debug(
+                f" {is_chosen} {action_:>2d}: "
+                f"log likelihood = {log_likelihood:6.2f}"
+            )

@@ -95,22 +95,35 @@ def technical_config():
     dtype = torch.float
     seed = 1971248
     debug = False
+    debug_verbosity = 2
 
 
 @ex.named_config
-def debug():
+def debug_mcbs():
     algorithm = "mcbs"
-    env_type = "1d"
     name = "mcbs_debug"
+    debug = True
 
-    train_steps = 10
-    train_beamsize = 2
+    eval_jets = 1
+    eval_filename = "./data/eval/debug.pickle"
+
+    train_steps = 0
+    train_beamsize = 3
     train_n_mc_min = 1
     train_n_mc_max = 2
 
-    eval_beamsize = 2
+    eval_beamsize = 3
     eval_n_mc_min = 1
     eval_n_mc_max = 2
+
+
+@ex.named_config
+def debug_greedy():
+    algorithm = "greedy"
+    name = "greedy_debug"
+    debug = True
+    eval_jets = 1
+    eval_filename = "./data/eval/debug.pickle"
 
 
 @ex.named_config
@@ -165,10 +178,10 @@ def mcbs_s():
 
     train_beamsize = 5
     eval_beamsize = 5
-    train_n_mc_target = 2
-    eval_n_mc_target = 2
-    train_n_mc_max = 40
-    eval_n_mc_max = 40
+    train_n_mc_target = 1
+    eval_n_mc_target = 1
+    train_n_mc_max = 25
+    eval_n_mc_max = 25
 
 
 @ex.named_config
@@ -178,10 +191,10 @@ def mcbs_m():
 
     train_beamsize = 20
     eval_beamsize = 20
-    train_n_mc_target = 5
-    eval_n_mc_target = 5
-    train_n_mc_max = 100
-    eval_n_mc_max = 100
+    train_n_mc_target = 2
+    eval_n_mc_target = 2
+    train_n_mc_max = 50
+    eval_n_mc_max = 50
 
 
 @ex.named_config
@@ -191,7 +204,7 @@ def mcbs_l():
 
     train_beamsize = 100
     eval_beamsize = 100
-    train_n_mc_target = 10
-    eval_n_mc_target = 10
+    train_n_mc_target = 5
+    eval_n_mc_target = 5
     train_n_mc_max = 200
     eval_n_mc_max = 200

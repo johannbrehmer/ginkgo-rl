@@ -37,7 +37,7 @@ class Agent(nn.Module):
         self.train()
         if list(self.parameters()):
             self.optimizer = torch.optim.Adam(params=self.parameters(), lr=self.lr, weight_decay=self.weight_decay)
-            self.scheduler = torch.optim.lr_scheduler.ExponentialLR(self.optimizer, gamma=self.lr_decay**(1. / total_timesteps))
+            self.scheduler = torch.optim.lr_scheduler.ExponentialLR(self.optimizer, gamma=self.lr_decay**(1. / (total_timesteps + 1.0e-9)))
         else:
             self.optimizer = None  # For non-NN methods
             self.scheduler = None
