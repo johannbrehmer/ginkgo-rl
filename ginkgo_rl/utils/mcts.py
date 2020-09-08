@@ -112,7 +112,8 @@ class MCTSNode:
         return choices
 
     def select_greedy(self):
-        return self.select_beam_search(1, exclude_beam_tagged=False)[0]
+        choices = self.select_beam_search(1, exclude_beam_tagged=False)
+        return 0 if not choices else choices[0]
 
     def prune(self):
         """ Steps into a subtree and updates all paths (and the new root's parent link) """

@@ -4,14 +4,17 @@ from sacred import Experiment
 from sacred.observers import FileStorageObserver, MongoObserver
 
 ex = Experiment(name="rl-ginkgo")
-__all__ = ["ex", "config", "env_config", "agent_config", "train_config", "eval_config", "baseline_config", "technical_config"]
+__all__ = ["ex", "config", "env_config", "agent_config", "train_config", "eval_config", "technical_config"]
 
 
 # noinspection PyUnusedLocal
 @ex.config
 def config():
-    algorithm = "mcbs"  # one of "mcts", "mcbs", "greedy", "random"
+    algorithm = "mcbs"
+    assert algorithm in ["mcts", "mcbs", "random_mcts", "random_mcbs", "greedy", "random", "truth", "mle"]
+
     env_type = "1d"
+    assert env_type in ["1d", "2d"]
 
     name = algorithm
     run_name = f"{name}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
@@ -66,7 +69,7 @@ def train_config():
     train_mcts_mode = "mean"
     train_c_puct = 1.0
 
-    train_steps = 10000
+    train_steps = 5000
     learning_rate = 1.0e-3
     lr_decay = 0.01
     weight_decay = 0.0
@@ -208,3 +211,38 @@ def mcbs_l():
     eval_n_mc_target = 5
     train_n_mc_max = 200
     eval_n_mc_max = 200
+
+
+@ex.named_config
+def mcts_s():
+    algorithm = "mcts"
+    name = "mcts_s"
+
+    train_n_mc_target = 1
+    eval_n_mc_target = 1
+    train_n_mc_max = 25
+    eval_n_mc_max = 25
+
+
+@ex.named_config
+def random_mcts_s():
+    algorithm = "random_mcts"
+    name = "random_mcts_s"
+
+    train_n_mc_target = 1
+    eval_n_mc_target = 1
+    train_n_mc_max = 25
+    eval_n_mc_max = 25
+
+
+@ex.named_config
+def random_mcbs_s():
+    algorithm = "random_mcbs"
+    name = "random_mcbs_s"
+
+    train_beamsize = 5
+    eval_beamsize = 5
+    train_n_mc_target = 1
+    eval_n_mc_target = 1
+    train_n_mc_max = 25
+    eval_n_mc_max = 25

@@ -6,6 +6,7 @@ import os
 from tqdm import trange
 import pickle
 import logging
+import torch
 
 from ginkgo_rl import GinkgoLikelihoodEnv, GinkgoLikelihood1DEnv
 
@@ -57,12 +58,17 @@ class GinkgoEvaluator():
         log_likelihoods = [[] for _ in range(self.n_jets)]
         illegal_actions = [[] for _ in range(self.n_jets)]
 
+        model.eval()
+
         for i in trange(len(self.jets) * n_repeats):
             i_jet = i // n_repeats
             jet = self.jets[i_jet]
 
             self.env.set_internal_state(jet)
-            log_likelihood, error = self._episode(model)
+
+            with torch.no_grad():
+                log_likelihood, error = self._episode(model)
+
             log_likelihoods[i_jet].append(log_likelihood)
             illegal_actions[i_jet].append(error)
 

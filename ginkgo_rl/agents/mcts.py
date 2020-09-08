@@ -220,18 +220,6 @@ class BaseMCTSAgent(Agent):
         raise NotImplementedError
 
 
-class RandomMCTSAgent(BaseMCTSAgent):
-    def _evaluate_policy(self, state, legal_actions, action=None):
-        """ Evaluates the policy on the state and returns the probabilities for a given action or all legal actions """
-        if action is not None:
-            torch.tensor(1. / len(legal_actions), dtype=self.dtype)
-        else:
-            return 1. / len(legal_actions) * torch.ones(len(legal_actions), dtype=self.dtype)
-
-    def _train(self):
-        return 0.0
-
-
 class MCTSAgent(BaseMCTSAgent):
     def __init__(self, *args, log_likelihood_feature=True, hidden_sizes=(100,100,), activation=nn.ReLU(), **kwargs):
         super().__init__(*args, **kwargs)
@@ -288,13 +276,19 @@ class MCTSAgent(BaseMCTSAgent):
         return loss.item()
 
 
-class MCBSAgent(MCTSAgent):
-    """
-    Beam search / MCTS hybrid
+class RandomMCTSAgent(BaseMCTSAgent):
+    def _evaluate_policy(self, state, legal_actions, step_rewards=None, action=None):
+        """ Evaluates the policy on the state and returns the probabilities for a given action or all legal actions """
+        if action is not None:
+            return torch.tensor(1. / len(legal_actions), dtype=self.dtype)
+        else:
+            return 1. / len(legal_actions) * torch.ones(len(legal_actions), dtype=self.dtype)
 
-    Runs beam search, then MCTS
-    """
+    def _train(self):
+        return torch.tensor(0.0)
 
+
+class BeamsearchMixin(BaseMCTSAgent):
     def __init__(self, *args, beam_size=10, **kwargs):
         super().__init__(*args, **kwargs)
         self.beam_size = beam_size
@@ -329,6 +323,11 @@ class MCBSAgent(MCTSAgent):
                 if self.verbose > 1: logger.debug(f"    Node is terminal")
                 if self.verbose > 1: logger.debug(f"    Backing up total reward {total_reward}")
                 node.give_reward(self.episode_reward + total_reward, backup=True)
+
+            # Debugging -- this should not happen
+            if not node.terminal and not node.children:
+                logger.warning(f"Unexpected lack of children! Path: {node.path}, children: {node.children.keys()}, legal actions: {self._find_legal_actions(this_state)}, terminal: {node.terminal}")
+                node.set_terminal(True)
 
             # Greedily select next action
             if not node.terminal:
@@ -398,3 +397,11 @@ class MCBSAgent(MCTSAgent):
         if self.verbose > 0:
             choice = self.mcts_head.select_best(mode="max")
             self._report_decision(choice, state, "Beam search")
+
+
+class MCBSAgent(BeamsearchMixin, MCTSAgent):
+    pass
+
+
+class RandomMCBSAgent(BeamsearchMixin, RandomMCTSAgent):
+    pass

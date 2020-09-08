@@ -9,7 +9,7 @@ import numpy as np
 sys.path.append("../")
 from experiments.config import ex, config, env_config, agent_config, train_config, technical_config
 from ginkgo_rl import GinkgoLikelihood1DEnv, GinkgoLikelihoodEnv
-from ginkgo_rl import MCTSAgent, GreedyAgent, RandomAgent, MCBSAgent
+from ginkgo_rl import MCTSAgent, GreedyAgent, RandomAgent, MCBSAgent, RandomMCTSAgent, RandomMCBSAgent
 from ginkgo_rl import GinkgoEvaluator
 
 logger = logging.getLogger(__name__)
@@ -144,6 +144,35 @@ def create_agent(
             beam_size=train_beamsize,
             verbose=debug_verbosity if debug else 0,
         )
+    elif algorithm == "random_mcts":
+        agent = RandomMCTSAgent(
+            env,
+            reward_range=reward_range,
+            history_length=history_length,
+            n_mc_target=train_n_mc_target,
+            n_mc_min=train_n_mc_min,
+            n_mc_max=train_n_mc_max,
+            mcts_mode=train_mcts_mode,
+            c_puct=train_c_puct,
+            device=device,
+            dtype=dtype,
+            verbose=debug_verbosity if debug else 0,
+        )
+    elif algorithm == "random_mcbs":
+        agent = RandomMCBSAgent(
+            env,
+            reward_range=reward_range,
+            history_length=history_length,
+            n_mc_target=train_n_mc_target,
+            n_mc_min=train_n_mc_min,
+            n_mc_max=train_n_mc_max,
+            mcts_mode=train_mcts_mode,
+            c_puct=train_c_puct,
+            device=device,
+            dtype=dtype,
+            beam_size=train_beamsize,
+            verbose=debug_verbosity if debug else 0,
+        )
     elif algorithm == "greedy":
         agent = GreedyAgent(env, device=device, dtype=dtype, verbose=debug_verbosity if debug else 0)
     elif algorithm == "random":
@@ -172,7 +201,7 @@ def log_training(_run, callback_info):
 
 @ex.capture
 def train(env, agent, algorithm, train_n_mc_target, train_n_mc_min, train_n_mc_max, train_mcts_mode, train_c_puct, train_steps):
-    if algorithm in ["greedy", "random", "truth", "mle", "beamsearch"]:
+    if algorithm in ["greedy", "random", "truth", "mle", "beamsearch", "random_mcts", "random_mcbs"]:
         logger.info(f"No training necessary for algorithm {algorithm}")
 
     else:
@@ -200,7 +229,7 @@ def eval(agent, env, name, algorithm, eval_n_mc_target, eval_n_mc_min, eval_n_mc
     jet_sizes = evaluator.get_jet_info()["n_leaves"]
 
     # Evaluate
-    if algorithm in ["mcts", "mcbs", "random"]:
+    if algorithm in ["mcts", "mcbs", "random_mcts", "random_mcbs", "random"]:
         try:
             agent.set_precision(eval_n_mc_target, eval_n_mc_min, eval_n_mc_max, eval_mcts_mode, eval_c_puct)
         except:
