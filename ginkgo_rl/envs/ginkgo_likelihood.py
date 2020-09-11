@@ -55,7 +55,7 @@ class GinkgoLikelihoodEnv(Env):
         jet_momentum=400.0,
         jetdir=(1, 1, 1),
         verbose=True,
-        reset_at_episode_end=True,
+        reset_at_episode_end=False,
     ):
         super().__init__()
 

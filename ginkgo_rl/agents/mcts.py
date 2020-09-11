@@ -3,7 +3,6 @@ from torch import nn
 import copy
 import logging
 import numpy as np
-from collections import deque
 
 from ginkgo_rl.utils.mcts import MCTSNode
 from .base import Agent
@@ -61,13 +60,7 @@ class BaseMCTSAgent(Agent):
         self.mcts_mode = mcts_mode
         self.c_puct = c_puct
 
-    def _predict(self, state):
-        if self.initialize_with_beam_search:
-            self._beam_search(state)
-        action, info = self._mcts(state)
-        return action, info
-
-    def update(self, state, reward, action, done, next_state, next_reward, num_episode, **kwargs):
+    def update(self, state, reward, action, done, next_state, next_reward, num_episode, memorize=True, train=True, **kwargs):
         """ Updates after environment reaction """
 
         # Keep track of total reward
@@ -84,11 +77,11 @@ class BaseMCTSAgent(Agent):
             self.mcts_head.prune()  # This updates the node.path
 
         # Memorize step
-        if self.training:
+        if self.training and memorize:
             self.history.store(log_prob=kwargs["log_prob"], reward=reward)
 
         loss = 0.0
-        if self.training and done:
+        if self.training and done and train:
             # Training
             loss = self._train()
 
@@ -96,6 +89,12 @@ class BaseMCTSAgent(Agent):
             self.history.clear()
 
         return loss
+
+    def _predict(self, state):
+        if self.initialize_with_beam_search:
+            self._beam_search(state)
+        action, info = self._mcts(state)
+        return action, info
 
     def _parse_path(self, state, path):
         """ Given a path (list of actions), computes the resulting environment state and total reward """
@@ -413,3 +412,5 @@ class LikelihoodMCTSAgent(BaseMCTSAgent):
 
     def _train(self):
         return torch.tensor(0.0)
+
+

@@ -82,7 +82,6 @@ class Agent(nn.Module):
                 episode_length = 0
                 state = self.env.reset()
 
-
     def predict(self, state):
         """
         Given an environment state, pick the next action and return it.

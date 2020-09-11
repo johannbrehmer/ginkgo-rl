@@ -3,7 +3,7 @@ import logging
 
 sys.path.append("../")
 from ginkgo_rl import GinkgoLikelihood1DEnv
-from ginkgo_rl import MCBSAgent
+from ginkgo_rl import PolicyMCTSAgent
 
 logging.basicConfig(
     format='%(asctime)-5.5s %(name)-20.20s %(levelname)-7.7s %(message)s',
