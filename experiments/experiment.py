@@ -189,7 +189,7 @@ def log_training(_run, callback_info):
 
 
 @ex.capture
-def train(env, agent, algorithm, policy, train_n_mc_target, train_n_mc_min, train_n_mc_max, train_mcts_mode, train_c_puct, train_steps):
+def train(env, agent, algorithm, policy, train_n_mc_target, train_n_mc_min, train_n_mc_max, train_mcts_mode, train_c_puct, train_steps, train_beamsize):
     if algorithm in ["greedy", "random", "truth", "mle", "beamsearch"]:
         logger.info(f"No training necessary for algorithm {algorithm}")
     elif algorithm == "mcts" and policy in ["random", "likelihood"]:
@@ -199,7 +199,7 @@ def train(env, agent, algorithm, policy, train_n_mc_target, train_n_mc_min, trai
 
         # Initialize MCTS agent settings (this won't do anything for some other types of agent)
         try:
-            agent.set_precision(train_n_mc_target, train_n_mc_min, train_n_mc_max, train_mcts_mode, train_c_puct)
+            agent.set_precision(train_n_mc_target, train_n_mc_min, train_n_mc_max, train_mcts_mode, train_c_puct, train_beamsize)
         except:
             pass
 
@@ -211,7 +211,7 @@ def train(env, agent, algorithm, policy, train_n_mc_target, train_n_mc_min, trai
 
 
 @ex.capture
-def eval(agent, env, name, algorithm, eval_n_mc_target, eval_n_mc_min, eval_n_mc_max, eval_mcts_mode, eval_c_puct, eval_repeats, eval_jets, eval_filename, redraw_eval_jets, eval_beamsize, run_name, _run):
+def eval(agent, env, name, algorithm, eval_n_mc_target, eval_n_mc_min, eval_n_mc_max, eval_mcts_mode, eval_c_puct, eval_repeats, eval_jets, eval_filename, redraw_eval_jets, run_name, eval_beamsize, _run):
     # Set up evaluator
     logger.info("Starting evaluation")
     os.makedirs(os.path.dirname(eval_filename), exist_ok=True)
@@ -220,18 +220,18 @@ def eval(agent, env, name, algorithm, eval_n_mc_target, eval_n_mc_min, eval_n_mc
 
     # Evaluate
     if algorithm == "mcts":
-        agent.set_precision(eval_n_mc_target, eval_n_mc_min, eval_n_mc_max, eval_mcts_mode, eval_c_puct)
-        log_likelihood, errors = evaluator.eval(name, agent, n_repeats=eval_repeats)
+        agent.set_precision(eval_n_mc_target, eval_n_mc_min, eval_n_mc_max, eval_mcts_mode, eval_c_puct, eval_beamsize)
+        log_likelihood, errors, likelihood_evaluations = evaluator.eval(name, agent, n_repeats=eval_repeats)
     elif algorithm == "random":
-        log_likelihood, errors = evaluator.eval(name, agent, n_repeats=eval_repeats)
+        log_likelihood, errors, likelihood_evaluations = evaluator.eval(name, agent, n_repeats=eval_repeats)
     elif algorithm == "greedy":
-        log_likelihood, errors = evaluator.eval(name, agent, n_repeats=1)
+        log_likelihood, errors, likelihood_evaluations = evaluator.eval(name, agent, n_repeats=1)
     elif algorithm == "beamsearch":
-        log_likelihood, errors = evaluator.eval_beam_search(name, beam_size=eval_beamsize)
+        log_likelihood, errors, likelihood_evaluations = evaluator.eval_beam_search(name, beam_size=eval_beamsize)
     elif algorithm == "truth":
-        log_likelihood, errors = evaluator.eval_true("Truth")
+        log_likelihood, errors, likelihood_evaluations = evaluator.eval_true("Truth")
     elif algorithm == "mle":
-        log_likelihood, errors = evaluator.eval_exact_trellis("MLE (Trellis)")
+        log_likelihood, errors, likelihood_evaluations = evaluator.eval_exact_trellis("MLE (Trellis)")
     else:
         raise ValueError(algorithm)
 
@@ -241,18 +241,23 @@ def eval(agent, env, name, algorithm, eval_n_mc_target, eval_n_mc_min, eval_n_mc
     np.save(f"{folder}/eval_log_likelihood.npy", log_likelihood)
     np.save(f"{folder}/eval_illegal_actions.npy", errors)
     np.save(f"{folder}/eval_jet_sizes.npy", jet_sizes)
+    np.save(f"{folder}/eval_likelihood_evaluations.npy", likelihood_evaluations)
     ex.add_artifact(f"{folder}/eval_log_likelihood.npy")
     ex.add_artifact(f"{folder}/eval_illegal_actions.npy")
     ex.add_artifact(f"{folder}/eval_jet_sizes.npy")
+    ex.add_artifact(f"{folder}/eval_likelihood_evaluations.npy")
 
     # Log results
     mean_log_likelihood = float(np.mean(np.array(log_likelihood).flatten()))
     mean_errors = float(np.mean(np.array(errors).flatten()))
+    mean_likelihood_evaluations = float(np.mean(np.array(likelihood_evaluations).flatten()))
     _run.log_scalar("eval_log_likelihood", mean_log_likelihood)
     _run.log_scalar("eval_illegal_actions", mean_errors)
+    _run.log_scalar("eval_likelihood_evaluations", mean_likelihood_evaluations)
     logger.info("Eval results:")
     logger.info(f"  Mean log likelihood: {mean_log_likelihood}")
     logger.info(f"  Mean illegal actions: {mean_errors}")
+    logger.info(f"  Mean likelihood evaluations: {mean_likelihood_evaluations}")
 
     return mean_log_likelihood
 

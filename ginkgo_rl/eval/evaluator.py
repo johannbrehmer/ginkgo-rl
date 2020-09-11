@@ -40,23 +40,24 @@ class GinkgoEvaluator():
         log_likelihoods = [[self._compute_true_log_likelihood(jet)] for jet in self.jets]
         illegal_actions = [[0] for _ in self.jets]
         self._update_results(method, log_likelihoods, illegal_actions)
-        return log_likelihoods, illegal_actions
+        return log_likelihoods, illegal_actions, None
 
     def eval_exact_trellis(self, method):
         log_likelihoods = [[self._compute_maximum_log_likelihood(jet)] for jet in self.jets]
         illegal_actions = [[0] for _ in self.jets]
         self._update_results(method, log_likelihoods, illegal_actions)
-        return log_likelihoods, illegal_actions
+        return log_likelihoods, illegal_actions, None
 
     def eval_beam_search(self, method, beam_size):
         log_likelihoods = [[self._compute_beam_search_log_likelihood(jet, beam_size)] for jet in self.jets]
         illegal_actions = [[0] for _ in self.jets]
         self._update_results(method, log_likelihoods, illegal_actions)
-        return log_likelihoods, illegal_actions
+        return log_likelihoods, illegal_actions, None
 
     def eval(self, method, model, n_repeats=1):
         log_likelihoods = [[] for _ in range(self.n_jets)]
         illegal_actions = [[] for _ in range(self.n_jets)]
+        likelihood_evaluations = [[] for _ in range(self.n_jets)]
 
         model.eval()
 
@@ -67,13 +68,14 @@ class GinkgoEvaluator():
             self.env.set_internal_state(jet)
 
             with torch.no_grad():
-                log_likelihood, error = self._episode(model)
+                log_likelihood, error, likelihood_evaluation = self._episode(model)
 
             log_likelihoods[i_jet].append(log_likelihood)
             illegal_actions[i_jet].append(error)
+            likelihood_evaluations[i_jet].append(likelihood_evaluations)
 
         self._update_results(method, log_likelihoods, illegal_actions)
-        return log_likelihoods, illegal_actions
+        return log_likelihoods, illegal_actions, likelihood_evaluations
 
     def eval_random(self, method, n_repeats=1):
         return self.eval(method, None, n_repeats)
@@ -186,6 +188,7 @@ class GinkgoEvaluator():
         log_likelihood = 0.
         errors = 0
         reward = 0.0
+        likelihood_evaluations = 0
 
         # Point model to correct env: this only works for *our* models, not the baselines
         try:
@@ -199,6 +202,7 @@ class GinkgoEvaluator():
                 agent_info = {}
             else:
                 action, agent_info = model.predict(state)
+                likelihood_evaluations = max(agent_info["likelihood_evaluations"], likelihood_evaluations)
             next_state, next_reward, done, info = self.env.step(action)
 
             log_likelihood += next_reward
@@ -213,7 +217,7 @@ class GinkgoEvaluator():
 
             reward, state = next_reward, next_state
 
-        return float(log_likelihood), int(errors)
+        return float(log_likelihood), int(errors), int(likelihood_evaluations)
 
     @staticmethod
     def _compute_true_log_likelihood(jet):

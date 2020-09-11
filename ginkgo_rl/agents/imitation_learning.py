@@ -81,7 +81,7 @@ class ImitationLearningPolicyMCTSAgent(PolicyMCTSAgent):
 
             if done or not demonstration_actions:
                 if callback is not None:
-                    callback(callback_info={"episode": episode, "episode_length": episode_length, "loss": episode_loss, "reward": episode_reward})
+                    callback(callback_info={"episode": episode, "episode_length": episode_length, "loss": episode_loss, "reward": episode_reward, "likelihood_evaluations": agent_info["likelihood_evaluations"]})
 
                 episode += 1
                 episode_loss = 0.0

@@ -41,6 +41,9 @@ class BaseMCTSAgent(Agent):
 
         self.sim_env = copy.deepcopy(self.env)
         self.sim_env.reset_at_episode_end = False  # Avoids expensive re-sampling of jets every time we parse a path
+
+        self.episode_reward = 0.0
+        self.episode_likelihood_evaluations = 0
         self._init_episode()
 
     def set_env(self, env):
@@ -95,6 +98,7 @@ class BaseMCTSAgent(Agent):
         if self.initialize_with_beam_search:
             self._beam_search(state)
         action, info = self._mcts(state)
+        info["episode_likelihood_evaluations"] = self.episode_likelihood_evaluations
         return action, info
 
     def _parse_path(self, state, path):
@@ -113,6 +117,7 @@ class BaseMCTSAgent(Agent):
         for action in path:
             state, reward, done, info = self.sim_env.step(action)
             total_reward += reward
+            self.episode_likelihood_evaluations += 1
 
             if done:
                 terminal = True
@@ -130,7 +135,7 @@ class BaseMCTSAgent(Agent):
         elif from_which_env == "sim":  # Use current state of self.sim_env
             pass
         else:
-            raise ValueError(mode)
+            raise ValueError(from_which_env)
 
         self.sim_env.verbose = False
 
@@ -140,6 +145,7 @@ class BaseMCTSAgent(Agent):
         except TypeError:
             log_likelihood = self.sim_env._compute_log_likelihood(self.sim_env.unwrap_action(action))
 
+        self.episode_likelihood_evaluations += 1
         return log_likelihood
 
     def _init_episode(self):
@@ -147,6 +153,7 @@ class BaseMCTSAgent(Agent):
 
         self.mcts_head = MCTSNode(None, [], reward_min=self.reward_range[0], reward_max=self.reward_range[1])
         self.episode_reward = 0.0
+        self.episode_likelihood_evaluations = 0
 
     def _mcts(self, state, max_steps=1000):
         """ Run Monte-Carl tree search from state for n trajectories"""
@@ -375,7 +382,7 @@ class PolicyMCTSAgent(BaseMCTSAgent):
         rollout = self.history.rollout()
         log_probs = torch.stack(rollout["log_prob"], dim=0)
 
-        # Compute loss: train policy to get closer to (deterministic) MCS choice
+        # Compute loss: train policy to get closer to MCTS choice
         loss = -torch.sum(log_probs)
 
         # Gradient update
@@ -410,5 +417,3 @@ class LikelihoodMCTSAgent(BaseMCTSAgent):
 
     def _train(self):
         return torch.tensor(0.0)
-
-
