@@ -4,7 +4,7 @@ from line_profiler import LineProfiler
 
 sys.path.append("../../")
 from ginkgo_rl import GinkgoLikelihood1DEnv
-from ginkgo_rl import MCTSAgent
+from ginkgo_rl import PolicyMCTSAgent
 from ginkgo_rl import GinkgoEvaluator
 
 logger = logging.getLogger(__name__)
@@ -24,7 +24,7 @@ if __name__ == "__main__":
 
     # Set up env, model and evaluator
     env = GinkgoLikelihood1DEnv()
-    model = MCTSAgent(env)
+    model = PolicyMCTSAgent(env)
     evaluator = GinkgoEvaluator(filename="temp.pickle", redraw_existing_jets=True, n_jets=3)
 
     # Profile

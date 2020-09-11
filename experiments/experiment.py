@@ -9,7 +9,7 @@ import numpy as np
 sys.path.append("../")
 from experiments.config import ex, config, env_config, agent_config, train_config, technical_config
 from ginkgo_rl import GinkgoLikelihood1DEnv, GinkgoLikelihoodEnv
-from ginkgo_rl import MCTSAgent, GreedyAgent, RandomAgent, MCBSAgent, RandomMCTSAgent, RandomMCBSAgent
+from ginkgo_rl import PolicyMCTSAgent, GreedyAgent, RandomAgent, RandomMCTSAgent, LikelihoodMCTSAgent
 from ginkgo_rl import GinkgoEvaluator
 
 logger = logging.getLogger(__name__)
@@ -107,12 +107,12 @@ def create_env(
 
 @ex.capture
 def create_agent(
-    env, algorithm, reward_range, history_length, train_n_mc_target, train_n_mc_min, train_n_mc_max, train_mcts_mode, train_c_puct, device, dtype, learning_rate, weight_decay, train_beamsize, debug, debug_verbosity
+    env, algorithm, policy, initialize_mcts_with_beamsearch, log_likelihood_policy_input, reward_range, history_length, train_n_mc_target, train_n_mc_min, train_n_mc_max, train_mcts_mode, train_c_puct, device, dtype, learning_rate, weight_decay, train_beamsize, debug, debug_verbosity
 ):
     logger.info(f"Setting up {algorithm} agent ")
 
-    if algorithm == "mcts":
-        agent = MCTSAgent(
+    if algorithm == "mcts" and policy == "nn":
+        agent = PolicyMCTSAgent(
             env,
             reward_range=reward_range,
             history_length=history_length,
@@ -120,15 +120,17 @@ def create_agent(
             n_mc_min=train_n_mc_min,
             n_mc_max=train_n_mc_max,
             mcts_mode=train_mcts_mode,
+            initialize_with_beam_search=initialize_mcts_with_beamsearch,
+            log_likelihood_feature=log_likelihood_policy_input,
             c_puct=train_c_puct,
-            device=device,
-            dtype=dtype,
             lr=learning_rate,
             weight_decay=weight_decay,
+            device=device,
+            dtype=dtype,
             verbose=debug_verbosity if debug else 0,
         )
-    elif algorithm == "mcbs":
-        agent = MCBSAgent(
+    elif algorithm == "mcts" and policy == "likelihood":
+        agent = LikelihoodMCTSAgent(
             env,
             reward_range=reward_range,
             history_length=history_length,
@@ -136,6 +138,7 @@ def create_agent(
             n_mc_min=train_n_mc_min,
             n_mc_max=train_n_mc_max,
             mcts_mode=train_mcts_mode,
+            initialize_with_beam_search=initialize_mcts_with_beamsearch,
             c_puct=train_c_puct,
             device=device,
             dtype=dtype,
@@ -144,7 +147,7 @@ def create_agent(
             beam_size=train_beamsize,
             verbose=debug_verbosity if debug else 0,
         )
-    elif algorithm == "random_mcts":
+    elif algorithm == "mcts" and policy == "random":
         agent = RandomMCTSAgent(
             env,
             reward_range=reward_range,
@@ -153,24 +156,10 @@ def create_agent(
             n_mc_min=train_n_mc_min,
             n_mc_max=train_n_mc_max,
             mcts_mode=train_mcts_mode,
+            initialize_with_beam_search=initialize_mcts_with_beamsearch,
             c_puct=train_c_puct,
             device=device,
             dtype=dtype,
-            verbose=debug_verbosity if debug else 0,
-        )
-    elif algorithm == "random_mcbs":
-        agent = RandomMCBSAgent(
-            env,
-            reward_range=reward_range,
-            history_length=history_length,
-            n_mc_target=train_n_mc_target,
-            n_mc_min=train_n_mc_min,
-            n_mc_max=train_n_mc_max,
-            mcts_mode=train_mcts_mode,
-            c_puct=train_c_puct,
-            device=device,
-            dtype=dtype,
-            beam_size=train_beamsize,
             verbose=debug_verbosity if debug else 0,
         )
     elif algorithm == "greedy":
@@ -200,10 +189,11 @@ def log_training(_run, callback_info):
 
 
 @ex.capture
-def train(env, agent, algorithm, train_n_mc_target, train_n_mc_min, train_n_mc_max, train_mcts_mode, train_c_puct, train_steps):
-    if algorithm in ["greedy", "random", "truth", "mle", "beamsearch", "random_mcts", "random_mcbs"]:
+def train(env, agent, algorithm, policy, train_n_mc_target, train_n_mc_min, train_n_mc_max, train_mcts_mode, train_c_puct, train_steps):
+    if algorithm in ["greedy", "random", "truth", "mle", "beamsearch"]:
         logger.info(f"No training necessary for algorithm {algorithm}")
-
+    elif algorithm == "mcts" and policy in ["random", "likelihood"]:
+        logger.info(f"No training necessary for MCTS policy {policy}")
     else:
         logger.info(f"Starting {algorithm} training for {train_steps} steps")
 
@@ -229,11 +219,10 @@ def eval(agent, env, name, algorithm, eval_n_mc_target, eval_n_mc_min, eval_n_mc
     jet_sizes = evaluator.get_jet_info()["n_leaves"]
 
     # Evaluate
-    if algorithm in ["mcts", "mcbs", "random_mcts", "random_mcbs", "random"]:
-        try:
-            agent.set_precision(eval_n_mc_target, eval_n_mc_min, eval_n_mc_max, eval_mcts_mode, eval_c_puct)
-        except:
-            pass
+    if algorithm == "mcts":
+        agent.set_precision(eval_n_mc_target, eval_n_mc_min, eval_n_mc_max, eval_mcts_mode, eval_c_puct)
+        log_likelihood, errors = evaluator.eval(name, agent, n_repeats=eval_repeats)
+    elif algorithm == "random":
         log_likelihood, errors = evaluator.eval(name, agent, n_repeats=eval_repeats)
     elif algorithm == "greedy":
         log_likelihood, errors = evaluator.eval(name, agent, n_repeats=1)
@@ -269,12 +258,14 @@ def eval(agent, env, name, algorithm, eval_n_mc_target, eval_n_mc_min, eval_n_mc
 
 
 @ex.capture
-def save_agent(agent, run_name):
-    if agent is not None:
+def save_agent(agent, algorithm, policy, run_name):
+    if algorithm == "mcts" and policy == "nn" and agent is not None:
         filename = f"./data/runs/{run_name}/model.pty"
         logger.info(f"Saving model at {filename}")
         torch.save(agent.state_dict(), filename)
         ex.add_artifact(filename)
+    else:
+        logger.debug(f"No model weights need to be saved for algorithm {algorithm} and policy {policy}")
 
 
 @ex.automain

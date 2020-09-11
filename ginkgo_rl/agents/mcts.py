@@ -22,6 +22,8 @@ class BaseMCTSAgent(Agent):
         mcts_mode="mean",
         c_puct=1.0,
         reward_range=(-200., 0.),
+        initialize_with_beam_search=True,
+        beam_size=10,
         verbose=False,
         **kwargs
     ):
@@ -32,6 +34,8 @@ class BaseMCTSAgent(Agent):
         self.n_mc_max = n_mc_max
         self.mcts_mode=mcts_mode
         self.c_puct = c_puct
+        self.initialize_with_beam_search = initialize_with_beam_search
+        self.beam_size = beam_size
 
         self.reward_range = reward_range
         self.verbose = verbose
@@ -58,6 +62,8 @@ class BaseMCTSAgent(Agent):
         self.c_puct = c_puct
 
     def _predict(self, state):
+        if self.initialize_with_beam_search:
+            self._beam_search(state)
         action, info = self._mcts(state)
         return action, info
 
@@ -194,6 +200,104 @@ class BaseMCTSAgent(Agent):
 
         return action, info
 
+    def _greedy(self, state):
+        """ Expands MCTS tree using a greedy algorithm """
+
+        node = self.mcts_head
+        if self.verbose > 1: logger.debug(f"Starting greedy algorithm.")
+
+        while not node.terminal:
+            # Parse current state
+            this_state, total_reward, terminal = self._parse_path(state, node.path)
+            node.set_terminal(terminal)
+            if self.verbose > 1: logger.debug(f"  Analyzing node {node.path}")
+
+            # Expand
+            if not node.terminal and not node.children:
+                actions = self._find_legal_actions(this_state)
+                step_rewards = [self._parse_action(action, from_which_env="sim") for action in actions]
+                if self.verbose > 1: logger.debug(f"    Expanding: {len(actions)} legal actions")
+                node.expand(actions, step_rewards=step_rewards)
+
+            # If terminal, backup reward
+            if node.terminal:
+                if self.verbose > 1: logger.debug(f"    Node is terminal")
+                if self.verbose > 1: logger.debug(f"    Backing up total reward {total_reward}")
+                node.give_reward(self.episode_reward + total_reward, backup=True)
+
+            # Debugging -- this should not happen
+            if not node.terminal and not node.children:
+                logger.warning(f"Unexpected lack of children! Path: {node.path}, children: {node.children.keys()}, legal actions: {self._find_legal_actions(this_state)}, terminal: {node.terminal}")
+                node.set_terminal(True)
+
+            # Greedily select next action
+            if not node.terminal:
+                action = node.select_greedy()
+                node = node.children[action]
+
+        if self.verbose > 0:
+            choice = self.mcts_head.select_best(mode="max")
+            self._report_decision(choice, state, "Greedy")
+
+    def _beam_search(self, state):
+        """ Expands MCTS tree using beam search """
+
+        beam = [(self.episode_reward, self.mcts_head)]
+        next_beam = []
+
+        def format_beam():
+            return [node.path for _, node in beam]
+
+        if self.verbose > 1: logger.debug(f"Starting beam search with beam size {self.beam_size}. Initial beam: {format_beam()}")
+
+        while beam or next_beam:
+            for i, (_, node) in enumerate(beam):
+                # Parse current state
+                this_state, total_reward, terminal = self._parse_path(state, node.path)
+                node.set_terminal(terminal)
+                if self.verbose > 1: logger.debug(f"  Analyzing node {i+1} / {len(beam)} on beam: {node.path}")
+
+                # Expand
+                if not node.terminal and not node.children:
+                    actions = self._find_legal_actions(this_state)
+                    step_rewards = [self._parse_action(action, from_which_env="sim") for action in actions]
+                    if self.verbose > 1: logger.debug(f"    Expanding: {len(actions)} legal actions")
+                    node.expand(actions, step_rewards=step_rewards)
+
+                # If terminal, backup reward
+                if node.terminal:
+                    if self.verbose > 1: logger.debug(f"    Node is terminal")
+                    if self.verbose > 1: logger.debug(f"    Backing up total reward {total_reward}")
+                    node.give_reward(self.episode_reward + total_reward, backup=True)
+
+                # Did we already process this one? Then skip it
+                n_beam_children = node.count_beam_children()
+                if n_beam_children >= min(self.beam_size, len(node)):
+                    if self.verbose > 1: logger.debug(f"    Already beam searched this node sufficiently")
+                    continue
+                else:
+                    if self.verbose > 1: logger.debug(f"    So far {n_beam_children} children were beam searched")
+
+                # Beam search selection
+                for action in node.select_beam_search(self.beam_size, exclude_beam_tagged=True):
+                    next_reward = total_reward + node.children[action].q_step
+                    next_node = node.children[action]
+                    next_beam.append((next_reward, next_node))
+
+                # Mark as visited
+                node.in_beam = True
+
+            # Just keep top entries for next step
+            beam = sorted(next_beam, key=lambda x: x[0], reverse=True)[:self.beam_size]
+            if self.verbose > 1: logger.debug(f"Preparing next step, keeping {self.beam_size} / {len(next_beam)} nodes in beam: {format_beam()}")
+            next_beam = []
+
+        logger.debug(f"Finished beam search")
+
+        if self.verbose > 0:
+            choice = self.mcts_head.select_best(mode="max")
+            self._report_decision(choice, state, "Beam search")
+
     def _report_decision(self, chosen_action, state, label="MCTS"):
         legal_actions = self._find_legal_actions(state)
         probs = self._evaluate_policy(state, legal_actions)
@@ -220,7 +324,7 @@ class BaseMCTSAgent(Agent):
         raise NotImplementedError
 
 
-class MCTSAgent(BaseMCTSAgent):
+class PolicyMCTSAgent(BaseMCTSAgent):
     def __init__(self, *args, log_likelihood_feature=True, hidden_sizes=(100,100,), activation=nn.ReLU(), **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -288,120 +392,17 @@ class RandomMCTSAgent(BaseMCTSAgent):
         return torch.tensor(0.0)
 
 
-class BeamsearchMixin(BaseMCTSAgent):
-    def __init__(self, *args, beam_size=10, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.beam_size = beam_size
+class LikelihoodMCTSAgent(BaseMCTSAgent):
+    def _evaluate_policy(self, state, legal_actions, step_rewards=None, action=None):
+        """ Evaluates the policy on the state and returns the probabilities for a given action or all legal actions """
+        assert step_rewards is not None
+        probabilities = torch.tensor(step_rewards, dtype=self.dtype)
+        probabilities = probabilities / torch.sum(probabilities)
 
-    def _predict(self, state):
-        self._greedy(state)  # Greedy
-        self._beam_search(state, beam_size=self.beam_size)  # Beam search
-        action, info = self._mcts(state)
-        return action, info
+        if action is not None:
+            return probabilities[action]
+        else:
+            return probabilities
 
-    def _greedy(self, state):
-        """ Expands MCTS tree using a greedy algorithm """
-
-        node = self.mcts_head
-        if self.verbose > 1: logger.debug(f"Starting greedy algorithm.")
-
-        while not node.terminal:
-            # Parse current state
-            this_state, total_reward, terminal = self._parse_path(state, node.path)
-            node.set_terminal(terminal)
-            if self.verbose > 1: logger.debug(f"  Analyzing node {node.path}")
-
-            # Expand
-            if not node.terminal and not node.children:
-                actions = self._find_legal_actions(this_state)
-                step_rewards = [self._parse_action(action, from_which_env="sim") for action in actions]
-                if self.verbose > 1: logger.debug(f"    Expanding: {len(actions)} legal actions")
-                node.expand(actions, step_rewards=step_rewards)
-
-            # If terminal, backup reward
-            if node.terminal:
-                if self.verbose > 1: logger.debug(f"    Node is terminal")
-                if self.verbose > 1: logger.debug(f"    Backing up total reward {total_reward}")
-                node.give_reward(self.episode_reward + total_reward, backup=True)
-
-            # Debugging -- this should not happen
-            if not node.terminal and not node.children:
-                logger.warning(f"Unexpected lack of children! Path: {node.path}, children: {node.children.keys()}, legal actions: {self._find_legal_actions(this_state)}, terminal: {node.terminal}")
-                node.set_terminal(True)
-
-            # Greedily select next action
-            if not node.terminal:
-                action = node.select_greedy()
-                node = node.children[action]
-
-        if self.verbose > 0:
-            choice = self.mcts_head.select_best(mode="max")
-            self._report_decision(choice, state, "Greedy")
-
-
-    def _beam_search(self, state, beam_size):
-        """ Expands MCTS tree using beam search """
-
-        beam = [(self.episode_reward, self.mcts_head)]
-        next_beam = []
-
-        def format_beam():
-            return [node.path for _, node in beam]
-
-        if self.verbose > 1: logger.debug(f"Starting beam search with beam size {beam_size}. Initial beam: {format_beam()}")
-
-        while beam or next_beam:
-            for i, (_, node) in enumerate(beam):
-                # Parse current state
-                this_state, total_reward, terminal = self._parse_path(state, node.path)
-                node.set_terminal(terminal)
-                if self.verbose > 1: logger.debug(f"  Analyzing node {i+1} / {len(beam)} on beam: {node.path}")
-
-                # Expand
-                if not node.terminal and not node.children:
-                    actions = self._find_legal_actions(this_state)
-                    step_rewards = [self._parse_action(action, from_which_env="sim") for action in actions]
-                    if self.verbose > 1: logger.debug(f"    Expanding: {len(actions)} legal actions")
-                    node.expand(actions, step_rewards=step_rewards)
-
-                # If terminal, backup reward
-                if node.terminal:
-                    if self.verbose > 1: logger.debug(f"    Node is terminal")
-                    if self.verbose > 1: logger.debug(f"    Backing up total reward {total_reward}")
-                    node.give_reward(self.episode_reward + total_reward, backup=True)
-
-                # Did we already process this one? Then skip it
-                n_beam_children = node.count_beam_children()
-                if n_beam_children >= min(beam_size, len(node)):
-                    if self.verbose > 1: logger.debug(f"    Already beam searched this node sufficiently")
-                    continue
-                else:
-                    if self.verbose > 1: logger.debug(f"    So far {n_beam_children} children were beam searched")
-
-                # Beam search selection
-                for action in node.select_beam_search(beam_size, exclude_beam_tagged=True):
-                    next_reward = total_reward + node.children[action].q_step
-                    next_node = node.children[action]
-                    next_beam.append((next_reward, next_node))
-
-                # Mark as visited
-                node.in_beam = True
-
-            # Just keep top entries for next step
-            beam = sorted(next_beam, key=lambda x: x[0], reverse=True)[:beam_size]
-            if self.verbose > 1: logger.debug(f"Preparing next step, keeping {beam_size} / {len(next_beam)} nodes in beam: {format_beam()}")
-            next_beam = []
-
-        logger.debug(f"Finished beam search")
-
-        if self.verbose > 0:
-            choice = self.mcts_head.select_best(mode="max")
-            self._report_decision(choice, state, "Beam search")
-
-
-class MCBSAgent(BeamsearchMixin, MCTSAgent):
-    pass
-
-
-class RandomMCBSAgent(BeamsearchMixin, RandomMCTSAgent):
-    pass
+    def _train(self):
+        return torch.tensor(0.0)

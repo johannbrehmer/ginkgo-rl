@@ -10,14 +10,20 @@ __all__ = ["ex", "config", "env_config", "agent_config", "train_config", "eval_c
 # noinspection PyUnusedLocal
 @ex.config
 def config():
-    algorithm = "mcbs"
-    assert algorithm in ["mcts", "mcbs", "random_mcts", "random_mcbs", "greedy", "random", "truth", "mle"]
-
+    algorithm = "mcts"  # TODO
+    policy = "nn"  # TODO
     env_type = "1d"
-    assert env_type in ["1d", "2d"]
 
-    name = algorithm
+    if algorithm == "mcts":
+        name = f"{algorithm}_{policy}"
+    else:
+        name = algorithm
     run_name = f"{name}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
+
+    # Check config
+    assert algorithm in ["mcts", "greedy", "random", "truth", "mle", "beamsearch"]
+    if algorithm == "mcts": assert policy in ["nn", "random", "likelihood"]
+    assert env_type in ["1d", "2d"]
 
     # Set up observer
     ex.observers.append(FileStorageObserver(f"./data/runs/{run_name}"))
@@ -52,6 +58,9 @@ def env_config():
 # noinspection PyUnusedLocal
 @ex.config
 def agent_config():
+    initialize_mcts_with_beamsearch = True  # TODO
+    log_likelihood_policy_input = True  # TODO
+
     reward_range = (-500., 0.)
     history_length = None
     hidden_sizes = (100, 100,)
@@ -61,9 +70,9 @@ def agent_config():
 # noinspection PyUnusedLocal
 @ex.config
 def train_config():
-    train_n_mc_target = 5
+    train_n_mc_target = 10
     train_n_mc_min = 1
-    train_n_mc_max = 50
+    train_n_mc_max = 100
     train_beamsize = 10
 
     train_mcts_mode = "mean"
@@ -81,13 +90,14 @@ def eval_config():
     eval_n_mc_target = 10
     eval_n_mc_min = 1
     eval_n_mc_max = 100
+    eval_beamsize = 10
+
     eval_mcts_mode = "mean"
     eval_c_puct = 1.0
-    eval_beamsize = 10
 
     eval_jets = 500
     eval_repeats = 1
-    eval_filename = "./data/eval/eval.pickle"
+    eval_filename = "./data/eval/eval2.pickle"
     redraw_eval_jets = False
 
 
@@ -96,19 +106,21 @@ def eval_config():
 def technical_config():
     device = torch.device("cpu")
     dtype = torch.float
-    seed = 1971248
+    seed = 24927  # 1971248 was used for first round
     debug = False
-    debug_verbosity = 2
+    debug_verbosity = 1
 
 
 @ex.named_config
-def debug_mcbs():
-    algorithm = "mcbs"
-    name = "mcbs_debug"
+def debug():
+    algorithm = "mcts"
+    policy = "nn"
+    name = "debug"
     debug = True
 
     eval_jets = 1
     eval_filename = "./data/eval/debug.pickle"
+    redraw_eval_jets = True
 
     train_steps = 0
     train_beamsize = 3
@@ -118,15 +130,6 @@ def debug_mcbs():
     eval_beamsize = 3
     eval_n_mc_min = 1
     eval_n_mc_max = 2
-
-
-@ex.named_config
-def debug_greedy():
-    algorithm = "greedy"
-    name = "greedy_debug"
-    debug = True
-    eval_jets = 1
-    eval_filename = "./data/eval/debug.pickle"
 
 
 @ex.named_config
@@ -175,9 +178,17 @@ def beamsearch_l():
 
 
 @ex.named_config
-def mcbs_s():
-    algorithm = "mcbs"
-    name = "mcbs_s"
+def beamsearch_xl():
+    algorithm = "beamsearch"
+    name = "beamsearch_xl"
+    eval_beamsize = 1000
+
+
+@ex.named_config
+def mcts_s():
+    algorithm = "mcts"
+    policy = "nn"
+    name = "mcts_nn_s"
 
     train_beamsize = 5
     eval_beamsize = 5
@@ -188,9 +199,10 @@ def mcbs_s():
 
 
 @ex.named_config
-def mcbs_m():
-    algorithm = "mcbs"
-    name = "mcbs_m"
+def mcts_m():
+    algorithm = "mcts"
+    policy = "nn"
+    name = "mcts_nn_m"
 
     train_beamsize = 20
     eval_beamsize = 20
@@ -201,9 +213,10 @@ def mcbs_m():
 
 
 @ex.named_config
-def mcbs_l():
-    algorithm = "mcbs"
-    name = "mcbs_l"
+def mcts_l():
+    algorithm = "mcts"
+    policy = "nn"
+    name = "mcts_nn_l"
 
     train_beamsize = 100
     eval_beamsize = 100
@@ -214,35 +227,58 @@ def mcbs_l():
 
 
 @ex.named_config
-def mcts_s():
+def mcts_nobs():
     algorithm = "mcts"
-    name = "mcts_s"
+    policy = "nn"
+    initialize_mcts_with_beamsearch = False
+    name = "mcts_nn_nobs_s"
 
     train_n_mc_target = 1
     eval_n_mc_target = 1
     train_n_mc_max = 25
     eval_n_mc_max = 25
-
-
-@ex.named_config
-def random_mcts_s():
-    algorithm = "random_mcts"
-    name = "random_mcts_s"
-
-    train_n_mc_target = 1
-    eval_n_mc_target = 1
-    train_n_mc_max = 25
-    eval_n_mc_max = 25
-
-
-@ex.named_config
-def random_mcbs_s():
-    algorithm = "random_mcbs"
-    name = "random_mcbs_s"
-
     train_beamsize = 5
     eval_beamsize = 5
+
+
+@ex.named_config
+def mcts_random():
+    algorithm = "mcts"
+    policy = "random"
+    name = "mcts_random_s"
+
     train_n_mc_target = 1
     eval_n_mc_target = 1
     train_n_mc_max = 25
     eval_n_mc_max = 25
+    train_beamsize = 5
+    eval_beamsize = 5
+
+
+@ex.named_config
+def mcts_likelihood():
+    algorithm = "mcts"
+    policy = "likelihood"
+    name = "mcts_likelihood_s"
+
+    train_n_mc_target = 1
+    eval_n_mc_target = 1
+    train_n_mc_max = 25
+    eval_n_mc_max = 25
+    train_beamsize = 5
+    eval_beamsize = 5
+
+
+@ex.named_config
+def mcts_raw():
+    algorithm = "mcts"
+    policy = "nn"
+    log_likelihood_policy_input = False
+    name = "mcts_raw_s"
+
+    train_n_mc_target = 1
+    eval_n_mc_target = 1
+    train_n_mc_max = 25
+    eval_n_mc_max = 25
+    train_beamsize = 5
+    eval_beamsize = 5
