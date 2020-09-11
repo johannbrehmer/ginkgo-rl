@@ -23,7 +23,7 @@ def config():
     # Check config
     assert algorithm in ["mcts", "greedy", "random", "truth", "mle", "beamsearch"]
     if algorithm == "mcts": assert policy in ["nn", "random", "likelihood"]
-    assert env_type in ["1d", "2d"]
+    assert env_type == "1d"  # For now, 2d env is not supported
 
     # Set up observer
     ex.observers.append(FileStorageObserver(f"./data/runs/{run_name}"))
@@ -247,11 +247,8 @@ def mcts_random():
     policy = "random"
     name = "mcts_random_s"
 
-    train_n_mc_target = 1
     eval_n_mc_target = 1
-    train_n_mc_max = 25
     eval_n_mc_max = 25
-    train_beamsize = 5
     eval_beamsize = 5
 
 
@@ -261,11 +258,8 @@ def mcts_likelihood():
     policy = "likelihood"
     name = "mcts_likelihood_s"
 
-    train_n_mc_target = 1
     eval_n_mc_target = 1
-    train_n_mc_max = 25
     eval_n_mc_max = 25
-    train_beamsize = 5
     eval_beamsize = 5
 
 
@@ -280,5 +274,19 @@ def mcts_raw():
     eval_n_mc_target = 1
     train_n_mc_max = 25
     eval_n_mc_max = 25
+    train_beamsize = 5
+    eval_beamsize = 5
+
+
+@ex.named_config
+def mcts_only_beamsearch():
+    algorithm = "mcts"
+    policy = "likelihood"
+    name = "mcts_only_bs_s"
+
+    train_n_mc_target = 0
+    eval_n_mc_target = 0
+    train_n_mc_max = 0
+    eval_n_mc_max = 0
     train_beamsize = 5
     eval_beamsize = 5

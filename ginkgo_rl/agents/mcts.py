@@ -330,7 +330,7 @@ class PolicyMCTSAgent(BaseMCTSAgent):
 
         self.log_likelihood_feature = log_likelihood_feature
 
-        self.actor = MultiHeadedMLP(1 + int(self.log_likelihood_feature) + self.state_length, hidden_sizes=hidden_sizes, head_sizes=(1,), activation=activation, head_activations=(None,))
+        self.actor = MultiHeadedMLP(1 + 8 + int(self.log_likelihood_feature) + self.state_length, hidden_sizes=hidden_sizes, head_sizes=(1,), activation=activation, head_activations=(None,))
         self.softmax = nn.Softmax(dim=0)
 
     def _evaluate_policy(self, state, legal_actions, step_rewards=None, action=None):
@@ -354,14 +354,21 @@ class PolicyMCTSAgent(BaseMCTSAgent):
         for action, log_likelihood in zip(legal_actions, step_rewards):
             action_ = torch.tensor([action]).to(self.device, self.dtype)
 
+            i, j = self.env.unwrap_action(action)
+            pi = state[i, :]
+            pj = state[j, :]
+
             if self.log_likelihood_feature:
                 if log_likelihood is None:
                     log_likelihood = self._parse_action(action, from_which_env="real")
                 log_likelihood = np.clip(log_likelihood, self.reward_range[0], self.reward_range[1])
                 log_likelihood_ = torch.tensor([log_likelihood]).to(self.device, self.dtype)
-                batch_states.append(torch.cat((action_, log_likelihood_, state_), dim=0).unsqueeze(0))
+
+                combined_state = torch.cat((action_, pi, pj, log_likelihood_, state_), dim=0)
             else:
-                batch_states.append(torch.cat((action_, state_), dim=0).unsqueeze(0))
+                combined_state = torch.cat((action_, pi, pj, state_), dim=0)
+
+            batch_states.append(combined_state.unsqueeze(0))
 
         batch_states = torch.cat(batch_states, dim=0)
         return batch_states
@@ -396,7 +403,7 @@ class LikelihoodMCTSAgent(BaseMCTSAgent):
     def _evaluate_policy(self, state, legal_actions, step_rewards=None, action=None):
         """ Evaluates the policy on the state and returns the probabilities for a given action or all legal actions """
         assert step_rewards is not None
-        probabilities = torch.tensor(step_rewards, dtype=self.dtype)
+        probabilities = torch.exp(torch.tensor(step_rewards, dtype=self.dtype))
         probabilities = probabilities / torch.sum(probabilities)
 
         if action is not None:
