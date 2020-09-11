@@ -227,16 +227,45 @@ def mcts_l():
 
 
 @ex.named_config
-def mcts_nobs():
+def mcts_raw():
     algorithm = "mcts"
     policy = "nn"
-    initialize_mcts_with_beamsearch = False
-    name = "mcts_nn_nobs_s"
+    log_likelihood_policy_input = False
+    name = "mcts_raw_s"
 
     train_n_mc_target = 1
     eval_n_mc_target = 1
     train_n_mc_max = 20
     eval_n_mc_max = 20
+    train_beamsize = 5
+    eval_beamsize = 5
+
+
+@ex.named_config
+def mcts_no_beamsearch():
+    algorithm = "mcts"
+    policy = "nn"
+    initialize_mcts_with_beamsearch = False
+    name = "mcts_nn_no_beamsearch_s"
+
+    train_n_mc_target = 1
+    eval_n_mc_target = 1
+    train_n_mc_max = 20
+    eval_n_mc_max = 20
+    train_beamsize = 5
+    eval_beamsize = 5
+
+
+@ex.named_config
+def mcts_only_beamsearch():
+    algorithm = "mcts"
+    policy = "random"
+    name = "mcts_only_bs_s"
+
+    train_n_mc_target = 0
+    eval_n_mc_target = 0
+    train_n_mc_max = 0
+    eval_n_mc_max = 0
     train_beamsize = 5
     eval_beamsize = 5
 
@@ -260,33 +289,4 @@ def mcts_likelihood():
 
     eval_n_mc_target = 1
     eval_n_mc_max = 20
-    eval_beamsize = 5
-
-
-@ex.named_config
-def mcts_raw():
-    algorithm = "mcts"
-    policy = "nn"
-    log_likelihood_policy_input = False
-    name = "mcts_raw_s"
-
-    train_n_mc_target = 1
-    eval_n_mc_target = 1
-    train_n_mc_max = 20
-    eval_n_mc_max = 20
-    train_beamsize = 5
-    eval_beamsize = 5
-
-
-@ex.named_config
-def mcts_only_beamsearch():
-    algorithm = "mcts"
-    policy = "likelihood"
-    name = "mcts_only_bs_s"
-
-    train_n_mc_target = 0
-    eval_n_mc_target = 0
-    train_n_mc_max = 0
-    eval_n_mc_max = 0
-    train_beamsize = 5
     eval_beamsize = 5

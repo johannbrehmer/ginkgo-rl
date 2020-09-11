@@ -192,8 +192,8 @@ class BaseMCTSAgent(Agent):
                 # Expand
                 if not node.children:
                     actions = self._find_legal_actions(this_state)
-                    step_rewards = [self._parse_action(action, from_which_env="sim") for action in actions]
                     if self.verbose > 1: logger.debug(f"    Expanding: {len(actions)} legal actions")
+                    step_rewards = [self._parse_action(action, from_which_env="sim") for action in actions]
                     node.expand(actions, step_rewards=step_rewards)
 
                 # Select

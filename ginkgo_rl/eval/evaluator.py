@@ -255,7 +255,8 @@ class GinkgoEvaluator():
         evaluations = 0
 
         while n > 1:
-            evaluations += beam * n
+            evaluations += beam * n * (n - 1) // 2
+            beam = min(n, beam_size)
             n -= 1
 
         return evaluations

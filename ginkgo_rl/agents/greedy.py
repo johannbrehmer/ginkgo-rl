@@ -28,7 +28,7 @@ class GreedyAgent(Agent):
         legal_actions = self._find_legal_actions(state)
         rewards = []
 
-        for action in self._find_legal_actions(state):
+        for action in legal_actions:
             reward = self._parse_action(action)
             rewards.append(reward)
 
@@ -39,7 +39,7 @@ class GreedyAgent(Agent):
             self._report_decision(legal_actions, rewards, best_action)
 
         assert best_action is not None
-        return best_action, {}
+        return best_action, {"likelihood_evaluations": 0}  # TODO
 
     def update(self, state, reward, action, done, next_state, next_reward, num_episode, **kwargs):
         pass

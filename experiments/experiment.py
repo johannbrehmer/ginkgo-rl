@@ -179,6 +179,7 @@ def log_training(_run, callback_info):
     loss = callback_info.get('loss')
     reward = callback_info.get('reward')
     episode_length = callback_info.get('episode_length')
+    likelihood_evaluations = callback_info.get('likelihood_evaluations')
 
     if loss is not None:
         _run.log_scalar("training_loss", loss)
@@ -186,6 +187,8 @@ def log_training(_run, callback_info):
         _run.log_scalar("training_reward", reward)
     if episode_length is not None:
         _run.log_scalar("training_episode_length", episode_length)
+    if likelihood_evaluations is not None:
+        _run.log_scalar("training_likelihood_evaluations", likelihood_evaluations)
 
 
 @ex.capture
