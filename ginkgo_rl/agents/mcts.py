@@ -51,7 +51,7 @@ class BaseMCTSAgent(Agent):
         self.sim_env.reset_at_episode_end = False  # Avoids expensive re-sampling of jets every time we parse a path
         self._init_episode()
 
-    def set_precision(self, n_mc_target, n_mc_min, n_mc_max, mcts_mode, c_puct):
+    def set_precision(self, n_mc_target, n_mc_min, n_mc_max, mcts_mode, c_puct, beam_size):
         """ Sets / changes MCTS precision parameters """
 
         self.n_mc_target = n_mc_target
@@ -59,6 +59,7 @@ class BaseMCTSAgent(Agent):
         self.n_mc_max = n_mc_max
         self.mcts_mode = mcts_mode
         self.c_puct = c_puct
+        self.beam_size = beam_size
 
     def update(self, state, reward, action, done, next_state, next_reward, num_episode, memorize=True, train=True, **kwargs):
         """ Updates after environment reaction """
@@ -270,15 +271,12 @@ class BaseMCTSAgent(Agent):
                     node.give_reward(self.episode_reward + total_reward, backup=True)
 
                 # Did we already process this one? Then skip it
-                n_beam_children = node.count_beam_children()
-                if n_beam_children >= min(self.beam_size, len(node)):
+                if node.n_beamsearch >= self.beam_size:
                     if self.verbose > 1: logger.debug(f"    Already beam searched this node sufficiently")
                     continue
-                else:
-                    if self.verbose > 1: logger.debug(f"    So far {n_beam_children} children were beam searched")
 
                 # Beam search selection
-                for action in node.select_beam_search(self.beam_size, exclude_beam_tagged=True):
+                for action in node.select_beam_search(self.beam_size):
                     next_reward = total_reward + node.children[action].q_step
                     next_node = node.children[action]
                     next_beam.append((next_reward, next_node))

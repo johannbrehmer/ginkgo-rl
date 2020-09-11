@@ -3,7 +3,7 @@ import logging
 
 sys.path.append("../")
 from ginkgo_rl import GinkgoLikelihood1DEnv
-from ginkgo_rl import PolicyMCTSAgent
+from ginkgo_rl import ImitationLearningPolicyMCTSAgent
 
 logging.basicConfig(
     format='%(asctime)-5.5s %(name)-20.20s %(levelname)-7.7s %(message)s',
@@ -16,5 +16,5 @@ for key in logging.Logger.manager.loggerDict:
 
 env = GinkgoLikelihood1DEnv()
 
-model = MCBSAgent(env, n_mc_target=50, n_mc_min=1, beam_size=5, verbose=2)
-model.learn(total_timesteps=10)
+model = ImitationLearningPolicyMCTSAgent(env, verbose=2)
+model.learn(mode="imitation", total_timesteps=10)

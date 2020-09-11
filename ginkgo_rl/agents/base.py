@@ -74,7 +74,8 @@ class Agent(nn.Module):
             reward = next_reward
 
             if done:
-                callback(callback_info={"episode": episode, "episode_length": episode_length, "loss": episode_loss, "reward": episode_reward})
+                if callback is not None:
+                    callback(callback_info={"episode": episode, "episode_length": episode_length, "loss": episode_loss, "reward": episode_reward})
 
                 episode += 1
                 episode_loss = 0.0

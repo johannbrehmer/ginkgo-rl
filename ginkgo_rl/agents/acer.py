@@ -2,6 +2,7 @@ import torch
 from torch import nn
 import numpy as np
 import logging
+from torch.distributions import Categorical
 
 from .base import Agent
 from ..utils.various import iter_flatten

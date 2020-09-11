@@ -23,7 +23,7 @@ class MCTSNode:
         self.q_max = -float("inf")  # Highest reward encountered in this node
 
         self.q_step = q_step  # Reward received for the transition self.parent -> self
-        self.in_beam = False  # Flag for beam search
+        self.n_beamsearch = 0  # Flag for beam search
 
     def expand(self, actions, step_rewards=None):
         self.terminal = False
@@ -40,16 +40,18 @@ class MCTSNode:
     def set_terminal(self, terminal):
         self.terminal = terminal
 
-    def give_reward(self, reward, backup=True):
+    def give_reward(self, reward, backup=True, beamsearch=False):
         reward = np.clip(reward, self.reward_min, self.reward_max)
 
         self.q_max = max(self.q_max, reward)
         self.q += reward
         self.n += 1
         self.reward_normalizer.update(reward)
+        if beamsearch:
+            self.n_beamsearch += 1
 
         if backup and self.parent:
-            self.parent.give_reward(reward, backup=True)
+            self.parent.give_reward(reward, backup=True, beamsearch=beamsearch)
 
     def get_reward(self, mode="mean"):
         """ Returns normalized mean reward (for `mode=="mean"`) or best reward (for `mode=="max"`) """
@@ -105,14 +107,12 @@ class MCTSNode:
         assert choice is not None
         return choice
 
-    def select_beam_search(self, beam_size, exclude_beam_tagged=False):
+    def select_beam_search(self, beam_size):
         choices = sorted(list(self.children.keys()), key=lambda x : self.children[x].q_step, reverse=True)[:beam_size]
-        if exclude_beam_tagged:
-            choices = [action for action in choices if not self.children[action].in_beam]
         return choices
 
     def select_greedy(self):
-        choices = self.select_beam_search(1, exclude_beam_tagged=False)
+        choices = self.select_beam_search(1)
         return 0 if not choices else choices[0]
 
     def prune(self):
@@ -123,13 +123,6 @@ class MCTSNode:
 
         for child in self.children.values():
             child.prune()
-
-    def count_beam_children(self):
-        """ Counts number of children with is_beam = True """
-        counter = 0
-        for child in self.children.values():
-            counter += int(child.in_beam)
-        return counter
 
     def _compute_pucts(self, policy_probs=None, mode="mean", c_puct=1.0):
         if policy_probs is None:  # By default assume a uniform policy
