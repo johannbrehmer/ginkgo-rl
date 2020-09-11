@@ -39,20 +39,23 @@ class GinkgoEvaluator():
     def eval_true(self, method):
         log_likelihoods = [[self._compute_true_log_likelihood(jet)] for jet in self.jets]
         illegal_actions = [[0] for _ in self.jets]
+        likelihood_evaluations = [[0] for _ in self.jets]
         self._update_results(method, log_likelihoods, illegal_actions)
-        return log_likelihoods, illegal_actions, None
+        return log_likelihoods, illegal_actions, likelihood_evaluations
 
     def eval_exact_trellis(self, method):
         log_likelihoods = [[self._compute_maximum_log_likelihood(jet)] for jet in self.jets]
         illegal_actions = [[0] for _ in self.jets]
+        likelihood_evaluations = [[0] for _ in self.jets]
         self._update_results(method, log_likelihoods, illegal_actions)
-        return log_likelihoods, illegal_actions, None
+        return log_likelihoods, illegal_actions, likelihood_evaluations
 
     def eval_beam_search(self, method, beam_size):
         log_likelihoods = [[self._compute_beam_search_log_likelihood(jet, beam_size)] for jet in self.jets]
         illegal_actions = [[0] for _ in self.jets]
+        likelihood_evaluations = [[self._compute_beam_search_likelihood_evaluations(jet, beam_size)] for jet in self.jets]
         self._update_results(method, log_likelihoods, illegal_actions)
-        return log_likelihoods, illegal_actions, None
+        return log_likelihoods, illegal_actions, likelihood_evaluations
 
     def eval(self, method, model, n_repeats=1):
         log_likelihoods = [[] for _ in range(self.n_jets)]
@@ -72,7 +75,7 @@ class GinkgoEvaluator():
 
             log_likelihoods[i_jet].append(log_likelihood)
             illegal_actions[i_jet].append(error)
-            likelihood_evaluations[i_jet].append(likelihood_evaluations)
+            likelihood_evaluations[i_jet].append(likelihood_evaluation)
 
         self._update_results(method, log_likelihoods, illegal_actions)
         return log_likelihoods, illegal_actions, likelihood_evaluations
@@ -244,3 +247,15 @@ class GinkgoEvaluator():
             visualize=True,
         )[0]
         return sum(bs_jet["logLH"])
+
+    @staticmethod
+    def _compute_beam_search_likelihood_evaluations(jet, beam_size):
+        n = len(jet[0]["leaves"])
+        beam = 1
+        evaluations = 0
+
+        while n > 1:
+            evaluations += beam * n
+            n -= 1
+
+        return evaluations

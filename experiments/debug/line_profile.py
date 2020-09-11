@@ -25,17 +25,13 @@ if __name__ == "__main__":
     # Set up env, model and evaluator
     env = GinkgoLikelihood1DEnv()
     model = PolicyMCTSAgent(env)
-    evaluator = GinkgoEvaluator(filename="temp.pickle", redraw_existing_jets=True, n_jets=3)
+    evaluator = GinkgoEvaluator("temp.pickle", env, redraw_existing_jets=True, n_jets=3)
 
     # Profile
     lp = LineProfiler()
     lp.add_function(model._mcts)
-    lp.add_function(model._parse_path)
-    lp.add_function(model._evaluate_policy)
-    lp.add_function(model._batch_state)
-    lp.add_function(model._parse_action)
 
-    lp(evaluator.eval)("MCTS", model, "GinkgoLikelihood1D-v0", n_repeats=1)
+    lp(evaluator.eval)("MCTS", model, n_repeats=1)
 
     # Results
     logger.info("Line profiling results:")

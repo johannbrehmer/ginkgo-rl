@@ -98,15 +98,21 @@ class BaseMCTSAgent(Agent):
         if self.initialize_with_beam_search:
             self._beam_search(state)
         action, info = self._mcts(state)
-        info["episode_likelihood_evaluations"] = self.episode_likelihood_evaluations
+        info["likelihood_evaluations"] = self.episode_likelihood_evaluations
         return action, info
 
-    def _parse_path(self, state, path):
-        """ Given a path (list of actions), computes the resulting environment state and total reward """
+    def _parse_path(self, state, path, from_which_env="real"):
+        """ Given a path (list of actions), computes the resulting environment state and total reward.
 
-        # Store env state state
-        if self.sim_env.state is None or not np.all(np.isclose(self.sim_env.state, self.env.state)):
-            self.sim_env.set_internal_state(self.env.get_internal_state())
+        `from_which_env` defines the start point (either "sim" for self.sim_env, or "real" for self.env) """
+
+        if from_which_env == "real":  # Start in self.env state
+            if self.sim_env.state is None or not np.all(np.isclose(self.sim_env.state, self.env.state)):
+                self.sim_env.set_internal_state(self.env.get_internal_state())
+        elif from_which_env == "sim":  # Use current state of self.sim_env
+            pass
+        else:
+            raise ValueError(from_which_env)
 
         self.sim_env.verbose = False
 
@@ -158,11 +164,8 @@ class BaseMCTSAgent(Agent):
     def _mcts(self, state, max_steps=1000):
         """ Run Monte-Carl tree search from state for n trajectories"""
 
-        if len(self.mcts_head.children) == 1:
-            n = 1
-        else:
-            n_initial_legal_actions = len(self._find_legal_actions(state))
-            n = min(max(self.n_mc_target * n_initial_legal_actions - self.mcts_head.n, self.n_mc_min), self.n_mc_max)
+        n_initial_legal_actions = len(self._find_legal_actions(state))
+        n = min(max(self.n_mc_target * n_initial_legal_actions - self.mcts_head.n, self.n_mc_min), self.n_mc_max)
         logger.debug(f"Starting MCTS with {n} trajectories")
 
         for i in range(n):
@@ -172,7 +175,12 @@ class BaseMCTSAgent(Agent):
 
             for _ in range(max_steps):
                 # Parse current state
-                this_state, total_reward, terminal = self._parse_path(state, node.path)
+                if len(node.path) == 0:
+                    this_state, total_reward, terminal = self._parse_path(state, node.path)
+                else:  # We can speed this up by just doing a single step in self.sim_env
+                    this_state, last_step_reward, terminal = self._parse_path(this_state, node.path[-1:], from_which_env="sim")
+                    total_reward += last_step_reward
+
                 node.set_terminal(terminal)
                 if self.verbose > 1: logger.debug(f"  Node {node.path}")
 

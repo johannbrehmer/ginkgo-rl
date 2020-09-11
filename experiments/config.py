@@ -70,8 +70,8 @@ def agent_config():
 # noinspection PyUnusedLocal
 @ex.config
 def train_config():
-    train_n_mc_target = 10
-    train_n_mc_min = 1
+    train_n_mc_target = 5
+    train_n_mc_min = 0
     train_n_mc_max = 100
     train_beamsize = 10
 
@@ -87,8 +87,8 @@ def train_config():
 # noinspection PyUnusedLocal
 @ex.config
 def eval_config():
-    eval_n_mc_target = 10
-    eval_n_mc_min = 1
+    eval_n_mc_target = 5
+    eval_n_mc_min = 0
     eval_n_mc_max = 100
     eval_beamsize = 10
 
@@ -194,8 +194,8 @@ def mcts_s():
     eval_beamsize = 5
     train_n_mc_target = 1
     eval_n_mc_target = 1
-    train_n_mc_max = 25
-    eval_n_mc_max = 25
+    train_n_mc_max = 20
+    eval_n_mc_max = 20
 
 
 @ex.named_config
@@ -235,8 +235,8 @@ def mcts_nobs():
 
     train_n_mc_target = 1
     eval_n_mc_target = 1
-    train_n_mc_max = 25
-    eval_n_mc_max = 25
+    train_n_mc_max = 20
+    eval_n_mc_max = 20
     train_beamsize = 5
     eval_beamsize = 5
 
@@ -248,7 +248,7 @@ def mcts_random():
     name = "mcts_random_s"
 
     eval_n_mc_target = 1
-    eval_n_mc_max = 25
+    eval_n_mc_max = 20
     eval_beamsize = 5
 
 
@@ -259,7 +259,7 @@ def mcts_likelihood():
     name = "mcts_likelihood_s"
 
     eval_n_mc_target = 1
-    eval_n_mc_max = 25
+    eval_n_mc_max = 20
     eval_beamsize = 5
 
 
@@ -272,8 +272,8 @@ def mcts_raw():
 
     train_n_mc_target = 1
     eval_n_mc_target = 1
-    train_n_mc_max = 25
-    eval_n_mc_max = 25
+    train_n_mc_max = 20
+    eval_n_mc_max = 20
     train_beamsize = 5
     eval_beamsize = 5
 
