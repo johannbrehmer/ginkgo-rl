@@ -185,6 +185,20 @@ def beamsearch_xl():
 
 
 @ex.named_config
+def mcts_xs():
+    algorithm = "mcts"
+    policy = "nn"
+    name = "mcts_nn_xs"
+
+    train_beamsize = 3
+    eval_beamsize = 3
+    train_n_mc_target = 1
+    eval_n_mc_target = 1
+    train_n_mc_max = 10
+    eval_n_mc_max = 10
+
+
+@ex.named_config
 def mcts_s():
     algorithm = "mcts"
     policy = "nn"
