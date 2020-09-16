@@ -9,7 +9,7 @@ import numpy as np
 sys.path.append("../")
 from experiments.config import ex, config, env_config, agent_config, train_config, technical_config
 from ginkgo_rl import GinkgoLikelihood1DEnv, GinkgoLikelihoodEnv
-from ginkgo_rl import PolicyMCTSAgent, GreedyAgent, RandomAgent, RandomMCTSAgent, LikelihoodMCTSAgent
+from ginkgo_rl import PolicyMCTSAgent, GreedyAgent, RandomAgent, RandomMCTSAgent, LikelihoodMCTSAgent, ImitationLearningPolicyMCTSAgent
 from ginkgo_rl import GinkgoEvaluator
 
 logger = logging.getLogger(__name__)
@@ -162,6 +162,24 @@ def create_agent(
             dtype=dtype,
             verbose=debug_verbosity if debug else 0,
         )
+    elif algorithm == "imitation":
+        agent = ImitationLearningPolicyMCTSAgent(
+            env,
+            reward_range=reward_range,
+            history_length=history_length,
+            n_mc_target=train_n_mc_target,
+            n_mc_min=train_n_mc_min,
+            n_mc_max=train_n_mc_max,
+            mcts_mode=train_mcts_mode,
+            initialize_with_beam_search=initialize_mcts_with_beamsearch,
+            log_likelihood_feature=log_likelihood_policy_input,
+            c_puct=train_c_puct,
+            lr=learning_rate,
+            weight_decay=weight_decay,
+            device=device,
+            dtype=dtype,
+            verbose=debug_verbosity if debug else 0,
+        )
     elif algorithm == "greedy":
         agent = GreedyAgent(env, device=device, dtype=dtype, verbose=debug_verbosity if debug else 0)
     elif algorithm == "random":
@@ -192,23 +210,36 @@ def log_training(_run, callback_info):
 
 
 @ex.capture
-def train(env, agent, algorithm, policy, train_n_mc_target, train_n_mc_min, train_n_mc_max, train_mcts_mode, train_c_puct, train_steps, train_beamsize):
+def train(env, agent, algorithm, policy, teacher, train_n_mc_target, train_n_mc_min, train_n_mc_max, train_mcts_mode, train_c_puct, train_steps, train_beamsize, pretrain_c_puct, pretrain_steps, pretrain_beamsize, pretrain_mcts_mode, pretrain_n_mc_max, pretrain_n_mc_min, pretrain_n_mc_target):
     if algorithm in ["greedy", "random", "truth", "mle", "beamsearch"]:
         logger.info(f"No training necessary for algorithm {algorithm}")
     elif algorithm == "mcts" and policy in ["random", "likelihood"]:
         logger.info(f"No training necessary for MCTS policy {policy}")
-    else:
-        logger.info(f"Starting {algorithm} training for {train_steps} steps")
+    elif algorithm == "mcts":
+        # Pretraining
+        logger.info(f"Starting MCTS pretraining for {pretrain_steps} steps")
+        agent.set_precision(pretrain_n_mc_target, pretrain_n_mc_min, pretrain_n_mc_max, pretrain_mcts_mode, pretrain_c_puct, pretrain_beamsize)
+        _ = env.reset()
+        agent.learn(total_timesteps=pretrain_steps, callback=log_training)
 
-        # Initialize MCTS agent settings (this won't do anything for some other types of agent)
-        try:
-            agent.set_precision(train_n_mc_target, train_n_mc_min, train_n_mc_max, train_mcts_mode, train_c_puct, train_beamsize)
-        except:
-            pass
-
-        # Train
+        # Main training
+        logger.info(f"Starting MCTS training for {train_steps} steps")
+        agent.set_precision(train_n_mc_target, train_n_mc_min, train_n_mc_max, train_mcts_mode, train_c_puct, train_beamsize)
         _ = env.reset()
         agent.learn(total_timesteps=train_steps, callback=log_training)
+    elif algorithm == "imitation":
+        # Imitation learning
+        logger.info(f"Starting imitation learning pretraining for {pretrain_steps} steps")
+        _ = env.reset()
+        agent.learn(total_timesteps=pretrain_steps, callback=log_training, mode="imitation", teacher=teacher)
+
+        # RL training
+        logger.info(f"Starting MCTS training for {train_steps} steps")
+        _ = env.reset()
+        agent.set_precision(train_n_mc_target, train_n_mc_min, train_n_mc_max, train_mcts_mode, train_c_puct, train_beamsize)
+        agent.learn(total_timesteps=train_steps, callback=log_training)
+    else:
+        raise ValueError(algorithm)
 
     env.close()
 
@@ -222,7 +253,7 @@ def eval(agent, env, name, algorithm, eval_n_mc_target, eval_n_mc_min, eval_n_mc
     jet_sizes = evaluator.get_jet_info()["n_leaves"]
 
     # Evaluate
-    if algorithm == "mcts":
+    if algorithm in ["mcts", "imitation"]:
         agent.set_precision(eval_n_mc_target, eval_n_mc_min, eval_n_mc_max, eval_mcts_mode, eval_c_puct, eval_beamsize)
         log_likelihood, errors, likelihood_evaluations = evaluator.eval(name, agent, n_repeats=eval_repeats)
     elif algorithm == "random":

@@ -35,11 +35,11 @@ class ImitationLearningPolicyMCTSAgent(PolicyMCTSAgent):
         action_id = cat.sample()
 
         action = legal_actions[action_id]
-        info = {"log_probs": torch.log(probs)}
+        info = {"log_probs": torch.log(probs), "likelihood_evaluations":self.episode_likelihood_evaluations}
 
         return action, info
 
-    def learn(self, total_timesteps, callback=None, mode="imitation"):
+    def learn(self, total_timesteps, callback=None, mode="rl", teacher="truth"):
         # RL training
         assert mode in ["imitation", "rl"]
         if mode == "rl":
@@ -53,7 +53,7 @@ class ImitationLearningPolicyMCTSAgent(PolicyMCTSAgent):
         demonstration_actions = None
         while demonstration_actions is None:
             state = self.env.reset()
-            demonstration_actions = deque(self._find_demonstration_actions())
+            demonstration_actions = deque(self._find_demonstration_actions(teacher=teacher))
 
         reward = 0.
         rewards = []
@@ -72,7 +72,7 @@ class ImitationLearningPolicyMCTSAgent(PolicyMCTSAgent):
             # Transition to next step
             next_state, next_reward, done, env_info = self.env.step(demonstration_action)
 
-            episode_loss += loss
+            episode_loss += loss.item()
             episode_reward += next_reward
             episode_length += 1
             rewards.append(next_reward)
@@ -87,25 +87,26 @@ class ImitationLearningPolicyMCTSAgent(PolicyMCTSAgent):
                 episode_loss = 0.0
                 episode_reward = 0.0
                 episode_length = 0
+                self.episode_likelihood_evaluations = 0
 
                 demonstration_actions = None
                 while demonstration_actions is None:
                     state = self.env.reset()
-                    demonstration_actions = deque(self._find_demonstration_actions())
+                    demonstration_actions = deque(self._find_demonstration_actions(teacher=teacher))
 
-    def _find_demonstration_actions(self, source="mle"):
+    def _find_demonstration_actions(self, teacher="mle"):
         """ From self.env.jet, find the sequence of true actions... or the MLE sequence of actions """
 
         logger.debug("Beginning extraction of demonstrator actions.")
 
-        if source == "truth":
+        if teacher == "truth":
             jet = self.env.jet
-        elif source == "mle":
+        elif teacher == "mle":
             jet = self._get_maximum_likelihood_tree()
             if jet is None:
                 return None
         else:
-            raise ValueError(source)
+            raise ValueError(teacher)
 
         original_momenta = jet['content']  # original_momenta[i] are unmodified four-momenta of particle with ID i
         original_children = jet['tree']  # original_children[i] are original IDs of children of particle with ID i

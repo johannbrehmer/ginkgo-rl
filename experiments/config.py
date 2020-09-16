@@ -10,8 +10,9 @@ __all__ = ["ex", "config", "env_config", "agent_config", "train_config", "eval_c
 # noinspection PyUnusedLocal
 @ex.config
 def config():
-    algorithm = "mcts"  # TODO
-    policy = "nn"  # TODO
+    algorithm = "mcts"
+    policy = "nn"
+    teacher = "truth"
     env_type = "1d"
 
     if algorithm == "mcts":
@@ -21,8 +22,11 @@ def config():
     run_name = f"{name}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
 
     # Check config
-    assert algorithm in ["mcts", "greedy", "random", "truth", "mle", "beamsearch"]
-    if algorithm == "mcts": assert policy in ["nn", "random", "likelihood"]
+    assert algorithm in ["mcts", "imitation", "greedy", "random", "truth", "mle", "beamsearch"]
+    if algorithm == "mcts":
+        assert policy in ["nn", "random", "likelihood"]
+    if algorithm == "imitation":
+        assert teacher in ["truth", "mle"]
     assert env_type == "1d"  # For now, 2d env is not supported
 
     # Set up observer
@@ -70,15 +74,22 @@ def agent_config():
 # noinspection PyUnusedLocal
 @ex.config
 def train_config():
-    train_n_mc_target = 5
-    train_n_mc_min = 0
-    train_n_mc_max = 100
-    train_beamsize = 10
+    pretrain_steps = 100000
+    pretrain_n_mc_target = 1
+    pretrain_n_mc_min = 0
+    pretrain_n_mc_max = 10
+    pretrain_beamsize = 5
+    pretrain_mcts_mode = "mean"
+    pretrain_c_puct = 1.0
 
+    train_steps = 10000
+    train_n_mc_target = 1
+    train_n_mc_min = 0
+    train_n_mc_max = 20
+    train_beamsize = 5
     train_mcts_mode = "mean"
     train_c_puct = 1.0
 
-    train_steps = 5000
     learning_rate = 1.0e-3
     lr_decay = 0.01
     weight_decay = 0.0
@@ -190,11 +201,16 @@ def mcts_xs():
     policy = "nn"
     name = "mcts_nn_xs"
 
+    pretrain_beamsize = 3
+    pretrain_n_mc_target = 1
+    pretrain_n_mc_max = 10
+
     train_beamsize = 3
-    eval_beamsize = 3
     train_n_mc_target = 1
-    eval_n_mc_target = 1
     train_n_mc_max = 10
+
+    eval_beamsize = 3
+    eval_n_mc_target = 1
     eval_n_mc_max = 10
 
 
@@ -204,11 +220,16 @@ def mcts_s():
     policy = "nn"
     name = "mcts_nn_s"
 
+    pretrain_beamsize = 3
+    pretrain_n_mc_target = 1
+    pretrain_n_mc_max = 10
+
     train_beamsize = 5
-    eval_beamsize = 5
     train_n_mc_target = 1
-    eval_n_mc_target = 1
     train_n_mc_max = 20
+
+    eval_beamsize = 5
+    eval_n_mc_target = 1
     eval_n_mc_max = 20
 
 
@@ -218,11 +239,16 @@ def mcts_m():
     policy = "nn"
     name = "mcts_nn_m"
 
+    pretrain_beamsize = 3
+    pretrain_n_mc_target = 1
+    pretrain_n_mc_max = 10
+
     train_beamsize = 20
-    eval_beamsize = 20
     train_n_mc_target = 2
-    eval_n_mc_target = 2
     train_n_mc_max = 50
+
+    eval_beamsize = 20
+    eval_n_mc_target = 2
     eval_n_mc_max = 50
 
 
@@ -232,12 +258,31 @@ def mcts_l():
     policy = "nn"
     name = "mcts_nn_l"
 
+    pretrain_beamsize = 3
+    pretrain_n_mc_target = 1
+    pretrain_n_mc_max = 10
+
     train_beamsize = 100
-    eval_beamsize = 100
     train_n_mc_target = 5
-    eval_n_mc_target = 5
     train_n_mc_max = 200
+
+    eval_beamsize = 100
+    eval_n_mc_target = 5
     eval_n_mc_max = 200
+
+
+@ex.named_config
+def imitation_s():
+    algorithm = "imitation"
+    name = "imitation_s"
+
+    train_beamsize = 5
+    train_n_mc_target = 1
+    train_n_mc_max = 20
+
+    eval_beamsize = 5
+    eval_n_mc_target = 1
+    eval_n_mc_max = 20
 
 
 @ex.named_config
@@ -247,11 +292,16 @@ def mcts_raw():
     log_likelihood_policy_input = False
     name = "mcts_raw_s"
 
+    pretrain_beamsize = 3
+    pretrain_n_mc_target = 1
+    pretrain_n_mc_max = 10
+
     train_n_mc_target = 1
-    eval_n_mc_target = 1
     train_n_mc_max = 20
-    eval_n_mc_max = 20
     train_beamsize = 5
+
+    eval_n_mc_target = 1
+    eval_n_mc_max = 20
     eval_beamsize = 5
 
 
@@ -262,11 +312,16 @@ def mcts_no_beamsearch():
     initialize_mcts_with_beamsearch = False
     name = "mcts_nn_no_beamsearch_s"
 
+    pretrain_beamsize = 3
+    pretrain_n_mc_target = 1
+    pretrain_n_mc_max = 10
+
     train_n_mc_target = 1
-    eval_n_mc_target = 1
     train_n_mc_max = 20
-    eval_n_mc_max = 20
     train_beamsize = 5
+
+    eval_n_mc_target = 1
+    eval_n_mc_max = 20
     eval_beamsize = 5
 
 
@@ -276,11 +331,8 @@ def mcts_only_beamsearch():
     policy = "random"
     name = "mcts_only_bs_s"
 
-    train_n_mc_target = 0
     eval_n_mc_target = 0
-    train_n_mc_max = 0
     eval_n_mc_max = 0
-    train_beamsize = 5
     eval_beamsize = 5
 
 
