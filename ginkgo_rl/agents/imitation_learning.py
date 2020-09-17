@@ -25,18 +25,33 @@ class ImitationLearningPolicyMCTSAgent(PolicyMCTSAgent):
         else:
             raise ValueError(mode)
 
-    def _predict_policy(self, state):
+    def _predict_policy(self, state, demonstrator_action=None):
         state = self._tensorize(state)
         legal_actions = self._find_legal_actions(state)
         step_rewards = [self._parse_action(action, from_which_env="real") for action in legal_actions]
 
         probs = self._evaluate_policy(state, legal_actions, step_rewards)
-        cat = Categorical(torch.clamp(probs, 1.e-12, 1.0))
-        action_id = cat.sample()
+        probs = torch.clamp(probs, 1.e-6, 1.0)
+        try:
+            cat = Categorical(probs)
+            action_id = cat.sample()
+        except RuntimeError as e:
+            logger.error(f"Error evaluating policy. Policy probabilities: {probs.detach().numpy()}")
+            raise
 
         action = legal_actions[action_id]
-        info = {"log_probs": torch.log(probs), "likelihood_evaluations":self.episode_likelihood_evaluations}
+        log_probs = torch.log(probs)
+        log_prob_demo = None
+        if demonstrator_action is not None:
+            log_prob_demo = log_probs[legal_actions.index(demonstrator_action)]
 
+        info = {
+            "legal_actions": legal_actions,
+            "log_probs": log_probs,
+            "log_prob": log_probs[action_id],
+            "log_prob_demonstrator": log_prob_demo,
+            "likelihood_evaluations": self.episode_likelihood_evaluations
+        }
         return action, info
 
     def learn(self, total_timesteps, callback=None, mode="rl", teacher="truth"):
@@ -65,9 +80,9 @@ class ImitationLearningPolicyMCTSAgent(PolicyMCTSAgent):
         for _ in trange(total_timesteps):
             # Imitation learning
             demonstration_action = demonstration_actions.popleft()
-            _, agent_info = self.predict(state, mode="policy")
-            log_probs = agent_info["log_probs"]
-            loss = - log_probs[demonstration_action]
+            _, agent_info = self._predict_policy(state, demonstrator_action=demonstration_action)
+            loss = - agent_info["log_prob_demonstrator"]
+            self._gradient_step(loss)
 
             # Transition to next step
             next_state, next_reward, done, env_info = self.env.step(demonstration_action)
@@ -81,7 +96,7 @@ class ImitationLearningPolicyMCTSAgent(PolicyMCTSAgent):
 
             if done or not demonstration_actions:
                 if callback is not None:
-                    callback(callback_info={"episode": episode, "episode_length": episode_length, "loss": episode_loss, "reward": episode_reward, "likelihood_evaluations": agent_info["likelihood_evaluations"]})
+                    callback(callback_info={"episode": episode, "episode_length": episode_length, "loss": episode_loss, "reward": episode_reward, "likelihood_evaluations": agent_info["likelihood_evaluations"], "mean_abs_weight":self.get_mean_weight()})
 
                 episode += 1
                 episode_loss = 0.0

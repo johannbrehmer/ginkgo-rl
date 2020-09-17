@@ -60,11 +60,12 @@ class BaseMCTSAgent(Agent):
         self.n_mc_target = n_mc_target
         self.n_mc_min = n_mc_min
         self.n_mc_max = n_mc_max
+        self.n_mc_max = n_mc_max
         self.mcts_mode = mcts_mode
         self.c_puct = c_puct
         self.beam_size = beam_size
 
-    def update(self, state, reward, action, done, next_state, next_reward, num_episode, memorize=True, train=True, **kwargs):
+    def update(self, state, reward, action, done, next_state, next_reward, num_episode, **kwargs):
         """ Updates after environment reaction """
 
         # Keep track of total reward
@@ -80,19 +81,15 @@ class BaseMCTSAgent(Agent):
             self.mcts_head = self.mcts_head.children[action]
             self.mcts_head.prune()  # This updates the node.path
 
-        # Memorize step
-        if self.training and memorize:
-            self.history.store(log_prob=kwargs["log_prob"], reward=reward)
+        # Train
+        if self.training:
+            return self._train(kwargs["log_prob"])
+        else:
+            return 0.0
 
-        loss = 0.0
-        if self.training and done and train:
-            # Training
-            loss = self._train()
-
-            # Reset memory for next episode
-            self.history.clear()
-
-        return loss
+    def _init_replay_buffer(self, history_length):
+        # No need for a history in this one!
+        pass
 
     def _predict(self, state):
         if self.initialize_with_beam_search:
@@ -331,19 +328,22 @@ class BaseMCTSAgent(Agent):
         """ Evaluates the policy on the state and returns the probabilities for a given action or all legal actions """
         raise NotImplementedError
 
-    def _train(self):
-        """ Policy updates at end of episode and returns loss """
+    def _train(self, log_prob):
+        """ Policy updates at end of each step, returns loss """
         raise NotImplementedError
 
 
 class PolicyMCTSAgent(BaseMCTSAgent):
-    def __init__(self, *args, log_likelihood_feature=True, hidden_sizes=(100,100,), activation=nn.ReLU(), **kwargs):
+    def __init__(self, *args, log_likelihood_feature=True, hidden_sizes=(100,100,), activation=nn.ReLU(), action_factor=0.01, log_likelihood_factor=0.1, **kwargs):
         super().__init__(*args, **kwargs)
 
         self.log_likelihood_feature = log_likelihood_feature
 
         self.actor = MultiHeadedMLP(1 + 8 + int(self.log_likelihood_feature) + self.state_length, hidden_sizes=hidden_sizes, head_sizes=(1,), activation=activation, head_activations=(None,))
         self.softmax = nn.Softmax(dim=0)
+
+        self.action_factor = action_factor
+        self.log_likelihood_factor = log_likelihood_factor
 
     def _evaluate_policy(self, state, legal_actions, step_rewards=None, action=None):
         batch_states = self._batch_state(state, legal_actions, step_rewards=step_rewards)
@@ -364,7 +364,7 @@ class PolicyMCTSAgent(BaseMCTSAgent):
         batch_states = []
 
         for action, log_likelihood in zip(legal_actions, step_rewards):
-            action_ = torch.tensor([action]).to(self.device, self.dtype)
+            action_ = self.action_factor * torch.tensor([action]).to(self.device, self.dtype)
 
             i, j = self.env.unwrap_action(action)
             pi = state[i, :]
@@ -373,8 +373,10 @@ class PolicyMCTSAgent(BaseMCTSAgent):
             if self.log_likelihood_feature:
                 if log_likelihood is None:
                     log_likelihood = self._parse_action(action, from_which_env="real")
+                if not np.isfinite(log_likelihood):
+                    log_likelihood = 0.
                 log_likelihood = np.clip(log_likelihood, self.reward_range[0], self.reward_range[1])
-                log_likelihood_ = torch.tensor([log_likelihood]).to(self.device, self.dtype)
+                log_likelihood_ = self.log_likelihood_factor * torch.tensor([log_likelihood]).to(self.device, self.dtype)
 
                 combined_state = torch.cat((action_, pi, pj, log_likelihood_, state_), dim=0)
             else:
@@ -385,18 +387,14 @@ class PolicyMCTSAgent(BaseMCTSAgent):
         batch_states = torch.cat(batch_states, dim=0)
         return batch_states
 
-    def _train(self):
-        # Roll out last episode
-        rollout = self.history.rollout()
-        log_probs = torch.stack(rollout["log_prob"], dim=0)
-
-        # Compute loss: train policy to get closer to MCTS choice
-        loss = -torch.sum(log_probs)
-
-        # Gradient update
+    def _train(self, log_prob):
+        loss = - log_prob
         self._gradient_step(loss)
-
         return loss.item()
+
+    def get_mean_weight(self):
+        parameters = np.concatenate([param.detach().numpy().flatten() for _, param in self.named_parameters()], 0)
+        return np.mean(np.abs(parameters))
 
 
 class RandomMCTSAgent(BaseMCTSAgent):
@@ -407,7 +405,7 @@ class RandomMCTSAgent(BaseMCTSAgent):
         else:
             return 1. / len(legal_actions) * torch.ones(len(legal_actions), dtype=self.dtype)
 
-    def _train(self):
+    def _train(self, log_prob):
         return torch.tensor(0.0)
 
 
@@ -423,5 +421,5 @@ class LikelihoodMCTSAgent(BaseMCTSAgent):
         else:
             return probabilities
 
-    def _train(self):
+    def _train(self, log_prob):
         return torch.tensor(0.0)

@@ -75,7 +75,7 @@ class Agent(nn.Module):
 
             if done:
                 if callback is not None:
-                    callback(callback_info={"episode": episode, "episode_length": episode_length, "loss": episode_loss, "reward": episode_reward, "likelihood_evaluations": agent_info["likelihood_evaluations"]})
+                    callback(callback_info={"episode": episode, "episode_length": episode_length, "loss": episode_loss, "reward": episode_reward, "likelihood_evaluations": agent_info["likelihood_evaluations"], "mean_abs_weight":self.get_mean_weight()})
 
                 episode += 1
                 episode_loss = 0.0
@@ -145,3 +145,6 @@ class Agent(nn.Module):
                     actions.append((pi, pj))
 
         return actions
+
+    def get_mean_weight(self):
+        return 0.0

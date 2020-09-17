@@ -9,7 +9,7 @@ import numpy as np
 sys.path.append("../")
 from experiments.config import ex, config, env_config, agent_config, train_config, technical_config
 from ginkgo_rl import GinkgoLikelihood1DEnv, GinkgoLikelihoodEnv
-from ginkgo_rl import PolicyMCTSAgent, GreedyAgent, RandomAgent, RandomMCTSAgent, LikelihoodMCTSAgent, ImitationLearningPolicyMCTSAgent
+from ginkgo_rl import PolicyMCTSAgent, GreedyAgent, RandomAgent, RandomMCTSAgent, LikelihoodMCTSAgent, ImitationLearningPolicyMCTSAgent, BatchedACERAgent
 from ginkgo_rl import GinkgoEvaluator
 
 logger = logging.getLogger(__name__)
@@ -79,26 +79,6 @@ def create_env(
             jet_momentum,
             jetdir,
         )
-    elif env_type == "2d":
-        env = GinkgoLikelihoodEnv(
-            illegal_reward,
-            illegal_actions_patience,
-            n_max,
-            n_min,
-            n_target,
-            min_reward,
-            state_rescaling,
-            padding_value,
-            w_jet,
-            max_n_try,
-            w_rate,
-            qcd_rate,
-            pt_min,
-            qcd_mass,
-            w_mass,
-            jet_momentum,
-            jetdir,
-        )
     else:
         raise ValueError(env_type)
 
@@ -115,7 +95,6 @@ def create_agent(
         agent = PolicyMCTSAgent(
             env,
             reward_range=reward_range,
-            history_length=history_length,
             n_mc_target=train_n_mc_target,
             n_mc_min=train_n_mc_min,
             n_mc_max=train_n_mc_max,
@@ -133,7 +112,6 @@ def create_agent(
         agent = LikelihoodMCTSAgent(
             env,
             reward_range=reward_range,
-            history_length=history_length,
             n_mc_target=train_n_mc_target,
             n_mc_min=train_n_mc_min,
             n_mc_max=train_n_mc_max,
@@ -151,7 +129,6 @@ def create_agent(
         agent = RandomMCTSAgent(
             env,
             reward_range=reward_range,
-            history_length=history_length,
             n_mc_target=train_n_mc_target,
             n_mc_min=train_n_mc_min,
             n_mc_max=train_n_mc_max,
@@ -162,11 +139,10 @@ def create_agent(
             dtype=dtype,
             verbose=debug_verbosity if debug else 0,
         )
-    elif algorithm == "imitation":
+    elif algorithm in ["lfd", "lfd-mcts"]:
         agent = ImitationLearningPolicyMCTSAgent(
             env,
             reward_range=reward_range,
-            history_length=history_length,
             n_mc_target=train_n_mc_target,
             n_mc_min=train_n_mc_min,
             n_mc_max=train_n_mc_max,
@@ -179,6 +155,14 @@ def create_agent(
             device=device,
             dtype=dtype,
             verbose=debug_verbosity if debug else 0,
+        )
+    elif algorithm == "acer":
+        agent = BatchedACERAgent(
+            env,
+            lr=learning_rate,
+            weight_decay=weight_decay,
+            device=device,
+            dtype=dtype,
         )
     elif algorithm == "greedy":
         agent = GreedyAgent(env, device=device, dtype=dtype, verbose=debug_verbosity if debug else 0)
@@ -198,6 +182,7 @@ def log_training(_run, callback_info):
     reward = callback_info.get('reward')
     episode_length = callback_info.get('episode_length')
     likelihood_evaluations = callback_info.get('likelihood_evaluations')
+    mean_abs_weight = callback_info.get('mean_abs_weight')
 
     if loss is not None:
         _run.log_scalar("training_loss", loss)
@@ -207,10 +192,12 @@ def log_training(_run, callback_info):
         _run.log_scalar("training_episode_length", episode_length)
     if likelihood_evaluations is not None:
         _run.log_scalar("training_likelihood_evaluations", likelihood_evaluations)
+    if mean_abs_weight is not None:
+        _run.log_scalar("mean_abs_weight", mean_abs_weight)
 
 
 @ex.capture
-def train(env, agent, algorithm, policy, teacher, train_n_mc_target, train_n_mc_min, train_n_mc_max, train_mcts_mode, train_c_puct, train_steps, train_beamsize, pretrain_c_puct, pretrain_steps, pretrain_beamsize, pretrain_mcts_mode, pretrain_n_mc_max, pretrain_n_mc_min, pretrain_n_mc_target):
+def train(env, agent, algorithm, policy, teacher, train_n_mc_target, train_n_mc_min, train_n_mc_max, train_mcts_mode, train_c_puct, train_steps, train_beamsize, pretrain_c_puct, pretrain_steps, pretrain_beamsize, pretrain_mcts_mode, pretrain_n_mc_max, pretrain_n_mc_min, pretrain_n_mc_target, imitation_steps):
     if algorithm in ["greedy", "random", "truth", "mle", "beamsearch"]:
         logger.info(f"No training necessary for algorithm {algorithm}")
     elif algorithm == "mcts" and policy in ["random", "likelihood"]:
@@ -227,17 +214,25 @@ def train(env, agent, algorithm, policy, teacher, train_n_mc_target, train_n_mc_
         agent.set_precision(train_n_mc_target, train_n_mc_min, train_n_mc_max, train_mcts_mode, train_c_puct, train_beamsize)
         _ = env.reset()
         agent.learn(total_timesteps=train_steps, callback=log_training)
-    elif algorithm == "imitation":
-        # Imitation learning
-        logger.info(f"Starting imitation learning pretraining for {pretrain_steps} steps")
+    elif algorithm == "lfd":
+        logger.info(f"Starting imitation learning training for {imitation_steps} steps")
         _ = env.reset()
-        agent.learn(total_timesteps=pretrain_steps, callback=log_training, mode="imitation", teacher=teacher)
+        agent.learn(total_timesteps=imitation_steps, callback=log_training, mode="imitation", teacher=teacher)
+    elif algorithm == "lfd-mcts":
+        # Imitation learning
+        logger.info(f"Starting imitation learning pretraining for {imitation_steps} steps")
+        _ = env.reset()
+        agent.learn(total_timesteps=imitation_steps, callback=log_training, mode="imitation", teacher=teacher)
 
         # RL training
         logger.info(f"Starting MCTS training for {train_steps} steps")
         _ = env.reset()
         agent.set_precision(train_n_mc_target, train_n_mc_min, train_n_mc_max, train_mcts_mode, train_c_puct, train_beamsize)
         agent.learn(total_timesteps=train_steps, callback=log_training)
+    elif algorithm == "acer":
+        logger.info(f"Starting ACER training for {pretrain_steps + train_steps} steps")
+        _ = env.reset()
+        agent.learn(total_timesteps=pretrain_steps + train_steps, callback=log_training)
     else:
         raise ValueError(algorithm)
 
@@ -253,10 +248,12 @@ def eval(agent, env, name, algorithm, eval_n_mc_target, eval_n_mc_min, eval_n_mc
     jet_sizes = evaluator.get_jet_info()["n_leaves"]
 
     # Evaluate
-    if algorithm in ["mcts", "imitation"]:
+    if algorithm in ["mcts", "lfd-mcts"]:
         agent.set_precision(eval_n_mc_target, eval_n_mc_min, eval_n_mc_max, eval_mcts_mode, eval_c_puct, eval_beamsize)
         log_likelihood, errors, likelihood_evaluations = evaluator.eval(name, agent, n_repeats=eval_repeats)
-    elif algorithm == "random":
+    elif algorithm == "lfd":
+        log_likelihood, errors, likelihood_evaluations = evaluator.eval(name, agent, n_repeats=eval_repeats, mode="policy")
+    elif algorithm in ["acer", "random"]:
         log_likelihood, errors, likelihood_evaluations = evaluator.eval(name, agent, n_repeats=eval_repeats)
     elif algorithm == "greedy":
         log_likelihood, errors, likelihood_evaluations = evaluator.eval(name, agent, n_repeats=1)

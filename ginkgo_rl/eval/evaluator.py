@@ -57,7 +57,7 @@ class GinkgoEvaluator():
         self._update_results(method, log_likelihoods, illegal_actions)
         return log_likelihoods, illegal_actions, likelihood_evaluations
 
-    def eval(self, method, model, n_repeats=1):
+    def eval(self, method, model, n_repeats=1, mode=None):
         log_likelihoods = [[] for _ in range(self.n_jets)]
         illegal_actions = [[] for _ in range(self.n_jets)]
         likelihood_evaluations = [[] for _ in range(self.n_jets)]
@@ -71,7 +71,7 @@ class GinkgoEvaluator():
             self.env.set_internal_state(jet)
 
             with torch.no_grad():
-                log_likelihood, error, likelihood_evaluation = self._episode(model)
+                log_likelihood, error, likelihood_evaluation = self._episode(model, mode=mode)
 
             log_likelihoods[i_jet].append(log_likelihood)
             illegal_actions[i_jet].append(error)
@@ -185,7 +185,7 @@ class GinkgoEvaluator():
 
         return jets
 
-    def _episode(self, model):
+    def _episode(self, model, mode=None):
         state = self.env.get_state()
         done = False
         log_likelihood = 0.
@@ -203,9 +203,13 @@ class GinkgoEvaluator():
             if model is None:
                 action = self.env.action_space.sample()
                 agent_info = {}
-            else:
+            elif mode is None:
                 action, agent_info = model.predict(state)
                 likelihood_evaluations = max(agent_info["likelihood_evaluations"], likelihood_evaluations)
+            else:
+                action, agent_info = model.predict(state, mode=mode)
+                likelihood_evaluations = max(agent_info["likelihood_evaluations"], likelihood_evaluations)
+
             next_state, next_reward, done, info = self.env.step(action)
 
             log_likelihood += next_reward

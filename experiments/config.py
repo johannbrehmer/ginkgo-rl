@@ -22,10 +22,10 @@ def config():
     run_name = f"{name}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
 
     # Check config
-    assert algorithm in ["mcts", "imitation", "greedy", "random", "truth", "mle", "beamsearch"]
+    assert algorithm in ["mcts", "lfd", "lfd-mcts", "acer", "greedy", "random", "truth", "mle", "beamsearch"]
     if algorithm == "mcts":
         assert policy in ["nn", "random", "likelihood"]
-    if algorithm == "imitation":
+    if algorithm in ["lfd", "lfd-mcts"]:
         assert teacher in ["truth", "mle"]
     assert env_type == "1d"  # For now, 2d env is not supported
 
@@ -74,7 +74,7 @@ def agent_config():
 # noinspection PyUnusedLocal
 @ex.config
 def train_config():
-    pretrain_steps = 100000
+    pretrain_steps = 50000
     pretrain_n_mc_target = 1
     pretrain_n_mc_min = 0
     pretrain_n_mc_max = 10
@@ -89,6 +89,8 @@ def train_config():
     train_beamsize = 5
     train_mcts_mode = "mean"
     train_c_puct = 1.0
+
+    imitation_steps = 500000
 
     learning_rate = 1.0e-3
     lr_decay = 0.01
@@ -272,9 +274,15 @@ def mcts_l():
 
 
 @ex.named_config
-def imitation_s():
-    algorithm = "imitation"
-    name = "imitation_s"
+def lfd_s():
+    algorithm = "lfd"
+    name = "lfd_s"
+
+
+@ex.named_config
+def lfd_mcts_s():
+    algorithm = "lfd-mcts"
+    name = "lfd-mcts_s"
 
     train_beamsize = 5
     train_n_mc_target = 1
@@ -283,6 +291,12 @@ def imitation_s():
     eval_beamsize = 5
     eval_n_mc_target = 1
     eval_n_mc_max = 20
+
+
+@ex.named_config
+def acer():
+    algorithm = "acer"
+    name = "acer"
 
 
 @ex.named_config
