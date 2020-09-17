@@ -125,7 +125,7 @@ def technical_config():
 
 
 @ex.named_config
-def debug():
+def debug_mcts():
     algorithm = "mcts"
     policy = "nn"
     name = "debug"
@@ -143,6 +143,15 @@ def debug():
     eval_beamsize = 3
     eval_n_mc_min = 1
     eval_n_mc_max = 2
+
+
+@ex.named_config
+def debug_lfd():
+    algorithm = "lfd"
+    name = "debug"
+    debug = True
+
+    imitation_steps = 10000
 
 
 @ex.named_config
