@@ -87,7 +87,7 @@ def create_env(
 
 @ex.capture
 def create_agent(
-    env, algorithm, policy, initialize_mcts_with_beamsearch, log_likelihood_policy_input, reward_range, history_length, train_n_mc_target, train_n_mc_min, train_n_mc_max, train_mcts_mode, train_c_puct, device, dtype, learning_rate, weight_decay, train_beamsize, debug, debug_verbosity
+    env, algorithm, policy, initialize_mcts_with_beamsearch, log_likelihood_policy_input, reward_range, history_length, train_n_mc_target, train_n_mc_min, train_n_mc_max, train_mcts_mode, train_c_puct, device, dtype, learning_rate, weight_decay, train_beamsize, debug, debug_verbosity, clip_gradient
 ):
     logger.info(f"Setting up {algorithm} agent ")
 
@@ -107,6 +107,7 @@ def create_agent(
             device=device,
             dtype=dtype,
             verbose=debug_verbosity if debug else 0,
+            clip_gradient=clip_gradient,
         )
     elif algorithm == "mcts" and policy == "likelihood":
         agent = LikelihoodMCTSAgent(
@@ -155,6 +156,7 @@ def create_agent(
             device=device,
             dtype=dtype,
             verbose=debug_verbosity if debug else 0,
+            clip_gradient=clip_gradient,
         )
     elif algorithm == "acer":
         agent = BatchedACERAgent(
@@ -163,6 +165,7 @@ def create_agent(
             weight_decay=weight_decay,
             device=device,
             dtype=dtype,
+            clip_gradient=clip_gradient,
         )
     elif algorithm == "greedy":
         agent = GreedyAgent(env, device=device, dtype=dtype, verbose=debug_verbosity if debug else 0)

@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 class Agent(nn.Module):
     """ Abstract base agent class """
 
-    def __init__(self, env, gamma=1.00, lr=1.0e-3, lr_decay=0.01, weight_decay=0.0, history_length=None, dtype=torch.float, device=torch.device("cpu"), *args, **kwargs):
+    def __init__(self, env, gamma=1.00, lr=1.0e-3, lr_decay=0.01, weight_decay=0.0, history_length=None, clip_gradient=None, dtype=torch.float, device=torch.device("cpu"), *args, **kwargs):
         self.env = env
         self.gamma = gamma
         self.device = device
@@ -26,6 +26,7 @@ class Agent(nn.Module):
         self.lr = lr
         self.lr_decay = lr_decay
         self.weight_decay = weight_decay
+        self.clip_gradient=clip_gradient
 
         super().__init__()
 
@@ -122,6 +123,14 @@ class Agent(nn.Module):
     def _gradient_step(self, loss):
         self.optimizer.zero_grad()
         loss.backward()
+
+        if self.clip_gradient is not None:
+            if self.verbose > 2:
+                grad_norm = torch.nn.utils.clip_grad_norm_(parameters, clip_gradient)
+                logger.debug(f"Gradient norm (clipping at {clip_gradient}): {grad_norm}")
+            else:
+                torch.nn.utils.clip_grad_norm_(self.parameters, self.clip_gradient)
+
         self.optimizer.step()
         self.scheduler.step()
 

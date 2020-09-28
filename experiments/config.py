@@ -87,6 +87,7 @@ def train_config():
     learning_rate = 1.0e-3
     lr_decay = 0.01
     weight_decay = 0.0
+    clip_gradient = None
 
 
 # noinspection PyUnusedLocal
@@ -279,6 +280,8 @@ def lfd_s():
     algorithm = "lfd"
     name = "lfd_s"
 
+    clip_gradient = 1.0
+
 
 @ex.named_config
 def lfd_mcts_s():
@@ -292,6 +295,8 @@ def lfd_mcts_s():
     eval_beamsize = 5
     eval_n_mc_target = 1
     eval_n_mc_max = 20
+
+    clip_gradient = 1.0
 
 
 @ex.named_config
