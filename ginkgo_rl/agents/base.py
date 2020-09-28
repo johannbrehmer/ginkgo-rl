@@ -126,10 +126,10 @@ class Agent(nn.Module):
 
         if self.clip_gradient is not None:
             if self.verbose > 2:
-                grad_norm = torch.nn.utils.clip_grad_norm_(parameters, clip_gradient)
+                grad_norm = torch.nn.utils.clip_grad_norm_(self.parameters(), self.clip_gradient)
                 logger.debug(f"Gradient norm (clipping at {clip_gradient}): {grad_norm}")
             else:
-                torch.nn.utils.clip_grad_norm_(self.parameters, self.clip_gradient)
+                torch.nn.utils.clip_grad_norm_(self.parameters(), self.clip_gradient)
 
         self.optimizer.step()
         self.scheduler.step()

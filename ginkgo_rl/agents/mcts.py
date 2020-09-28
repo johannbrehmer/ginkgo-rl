@@ -18,7 +18,8 @@ class BaseMCTSAgent(Agent):
         n_mc_target=5,
         n_mc_min=5,
         n_mc_max=100,
-        mcts_mode="mean",
+        planning_mode="mean",
+        decision_mode="max_reward",
         c_puct=1.0,
         reward_range=(-200., 0.),
         initialize_with_beam_search=True,
@@ -31,7 +32,8 @@ class BaseMCTSAgent(Agent):
         self.n_mc_target = n_mc_target
         self.n_mc_min = n_mc_min
         self.n_mc_max = n_mc_max
-        self.mcts_mode=mcts_mode
+        self.planning_mode = planning_mode
+        self.decision_mode = decision_mode
         self.c_puct = c_puct
         self.initialize_with_beam_search = initialize_with_beam_search
         self.beam_size = beam_size
@@ -54,14 +56,14 @@ class BaseMCTSAgent(Agent):
         self.sim_env.reset_at_episode_end = False  # Avoids expensive re-sampling of jets every time we parse a path
         self._init_episode()
 
-    def set_precision(self, n_mc_target, n_mc_min, n_mc_max, mcts_mode, c_puct, beam_size):
+    def set_precision(self, n_mc_target, n_mc_min, n_mc_max, planning_mode, c_puct, beam_size):
         """ Sets / changes MCTS precision parameters """
 
         self.n_mc_target = n_mc_target
         self.n_mc_min = n_mc_min
         self.n_mc_max = n_mc_max
         self.n_mc_max = n_mc_max
-        self.mcts_mode = mcts_mode
+        self.planning_mode = planning_mode
         self.c_puct = c_puct
         self.beam_size = beam_size
 
@@ -203,7 +205,7 @@ class BaseMCTSAgent(Agent):
 
                 # Select
                 policy_probs = self._evaluate_policy(this_state, node.children.keys(), step_rewards=node.children_q_steps())
-                action = node.select_puct(policy_probs, mode=self.mcts_mode, c_puct=self.c_puct)
+                action = node.select_puct(policy_probs, mode=self.planning_mode, c_puct=self.c_puct)
                 if self.verbose > 1: logger.debug(f"    Selecting action {action}")
                 node = node.children[action]
 
@@ -212,8 +214,24 @@ class BaseMCTSAgent(Agent):
             node.give_reward(self.episode_reward + total_reward, backup=True)
 
         # Select best action
-        action = self.mcts_head.select_best(mode="max")
-        info = {"log_prob": torch.log(self._evaluate_policy(state, self._find_legal_actions(state), step_rewards=self.mcts_head.children_q_steps(), action=action))}
+        legal_actions = list(self.mcts_head.children.keys())
+        if not legal_actions:
+            legal_actions = self._find_legal_actions(state)
+        step_rewards = self.mcts_head.children_q_steps()
+
+        if self.decision_mode == "max_reward":
+            action = self.mcts_head.select_best(mode="max")
+        elif self.decision_mode == "max_puct":
+            policy_probs = self._evaluate_policy(state, legal_actions, step_rewards=step_rewards)
+            action = self.mcts_head.select_puct(policy_probs=policy_probs, mode="max", c_puct=self.c_puct)
+        elif self.decision_mode == "mean_puct":
+            policy_probs = self._evaluate_policy(state, legal_actions, step_rewards=step_rewards)
+            action = self.mcts_head.select_puct(policy_probs=policy_probs, mode="max", c_puct=self.c_puct)
+        else:
+            raise ValueError(self.decision_mode)
+
+        log_prob = torch.log(self._evaluate_policy(state, legal_actions, step_rewards=step_rewards, action=action))
+        info = {"log_prob": log_prob}
 
         # Debug output
         if self.verbose > 0: self._report_decision(action, state)

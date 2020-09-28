@@ -54,8 +54,9 @@ def env_config():
 # noinspection PyUnusedLocal
 @ex.config
 def agent_config():
-    initialize_mcts_with_beamsearch = True  # TODO
-    log_likelihood_policy_input = True  # TODO
+    initialize_mcts_with_beamsearch = True
+    log_likelihood_policy_input = True
+    decision_mode = "max_mcts"  # {"max_reward", "max_puct", "mean_puct"}
 
     reward_range = (-500., 0.)
     history_length = None
@@ -71,7 +72,7 @@ def train_config():
     pretrain_n_mc_min = 0
     pretrain_n_mc_max = 10
     pretrain_beamsize = 5
-    pretrain_mcts_mode = "mean"
+    pretrain_planning_mode = "mean"  # {"max", "mean"}, refers to PUCT
     pretrain_c_puct = 1.0
 
     train_steps = 10000
@@ -79,7 +80,7 @@ def train_config():
     train_n_mc_min = 0
     train_n_mc_max = 20
     train_beamsize = 5
-    train_mcts_mode = "mean"
+    train_planning_mode = "mean"  # {"max", "mean"}, refers to PUCT
     train_c_puct = 1.0
 
     imitation_steps = 500000
@@ -98,7 +99,7 @@ def eval_config():
     eval_n_mc_max = 100
     eval_beamsize = 10
 
-    eval_mcts_mode = "mean"
+    eval_planning_mode = "mean"
     eval_c_puct = 1.0
 
     eval_jets = 500
@@ -370,6 +371,27 @@ def mcts_raw():
 
 
 @ex.named_config
+def mcts_puct_decisions():
+    algorithm = "mcts"
+    policy = "nn"
+    name = "mcts_puct_decisions_s"
+
+    pretrain_beamsize = 3
+    pretrain_n_mc_target = 1
+    pretrain_n_mc_max = 10
+
+    train_n_mc_target = 1
+    train_n_mc_max = 20
+    train_beamsize = 5
+
+    eval_n_mc_target = 1
+    eval_n_mc_max = 20
+    eval_beamsize = 5
+
+    decision_mode = "mean_puct"
+
+
+@ex.named_config
 def mcts_no_beamsearch():
     algorithm = "mcts"
     policy = "nn"
@@ -420,16 +442,3 @@ def mcts_likelihood():
     eval_n_mc_target = 1
     eval_n_mc_max = 20
     eval_beamsize = 5
-
-
-@ex.capture
-def check_config(algorithm, policy, teacher, env_type):
-    assert algorithm in ["mcts", "lfd", "lfd-mcts", "acer", "greedy", "random", "truth", "mle", "beamsearch"]
-    if algorithm == "mcts":
-        assert policy in ["nn", "random", "likelihood"]
-    if algorithm in ["lfd", "lfd-mcts"]:
-        assert teacher in ["truth", "mle"]
-    assert env_type == "1d"  # For now, 2d env is not supported
-
-
-check_config()

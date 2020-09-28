@@ -16,6 +16,16 @@ logger = logging.getLogger(__name__)
 
 
 @ex.capture
+def check_config(algorithm, policy, teacher, env_type):
+    assert algorithm in ["mcts", "lfd", "lfd-mcts", "acer", "greedy", "random", "truth", "mle", "beamsearch"]
+    if algorithm == "mcts":
+        assert policy in ["nn", "random", "likelihood"]
+    if algorithm in ["lfd", "lfd-mcts"]:
+        assert teacher in ["truth", "mle"]
+    assert env_type == "1d"  # For now, 2d env is not supported
+
+
+@ex.capture
 def setup_run(name, run_name, seed):
     logger.info(f"Setting up run {name}")
     os.makedirs(f"./data/runs/{run_name}/", exist_ok=True)
@@ -87,7 +97,7 @@ def create_env(
 
 @ex.capture
 def create_agent(
-    env, algorithm, policy, initialize_mcts_with_beamsearch, log_likelihood_policy_input, reward_range, history_length, train_n_mc_target, train_n_mc_min, train_n_mc_max, train_mcts_mode, train_c_puct, device, dtype, learning_rate, weight_decay, train_beamsize, debug, debug_verbosity, clip_gradient
+    env, algorithm, policy, initialize_mcts_with_beamsearch, log_likelihood_policy_input, reward_range, history_length, train_n_mc_target, train_n_mc_min, train_n_mc_max, train_planning_mode, train_c_puct, device, dtype, learning_rate, weight_decay, train_beamsize, debug, debug_verbosity, clip_gradient, decision_mode
 ):
     logger.info(f"Setting up {algorithm} agent ")
 
@@ -98,7 +108,7 @@ def create_agent(
             n_mc_target=train_n_mc_target,
             n_mc_min=train_n_mc_min,
             n_mc_max=train_n_mc_max,
-            mcts_mode=train_mcts_mode,
+            planning_mode=train_planning_mode,
             initialize_with_beam_search=initialize_mcts_with_beamsearch,
             log_likelihood_feature=log_likelihood_policy_input,
             c_puct=train_c_puct,
@@ -108,6 +118,7 @@ def create_agent(
             dtype=dtype,
             verbose=debug_verbosity if debug else 0,
             clip_gradient=clip_gradient,
+            decision_mode=decision_mode,
         )
     elif algorithm == "mcts" and policy == "likelihood":
         agent = LikelihoodMCTSAgent(
@@ -116,7 +127,7 @@ def create_agent(
             n_mc_target=train_n_mc_target,
             n_mc_min=train_n_mc_min,
             n_mc_max=train_n_mc_max,
-            mcts_mode=train_mcts_mode,
+            planning_mode=train_planning_mode,
             initialize_with_beam_search=initialize_mcts_with_beamsearch,
             c_puct=train_c_puct,
             device=device,
@@ -125,6 +136,7 @@ def create_agent(
             weight_decay=weight_decay,
             beam_size=train_beamsize,
             verbose=debug_verbosity if debug else 0,
+            decision_mode=decision_mode,
         )
     elif algorithm == "mcts" and policy == "random":
         agent = RandomMCTSAgent(
@@ -133,12 +145,13 @@ def create_agent(
             n_mc_target=train_n_mc_target,
             n_mc_min=train_n_mc_min,
             n_mc_max=train_n_mc_max,
-            mcts_mode=train_mcts_mode,
+            planning_mode=train_planning_mode,
             initialize_with_beam_search=initialize_mcts_with_beamsearch,
             c_puct=train_c_puct,
             device=device,
             dtype=dtype,
             verbose=debug_verbosity if debug else 0,
+            decision_mode=decision_mode,
         )
     elif algorithm in ["lfd", "lfd-mcts"]:
         agent = ImitationLearningPolicyMCTSAgent(
@@ -147,7 +160,7 @@ def create_agent(
             n_mc_target=train_n_mc_target,
             n_mc_min=train_n_mc_min,
             n_mc_max=train_n_mc_max,
-            mcts_mode=train_mcts_mode,
+            planning_mode=train_planning_mode,
             initialize_with_beam_search=initialize_mcts_with_beamsearch,
             log_likelihood_feature=log_likelihood_policy_input,
             c_puct=train_c_puct,
@@ -157,6 +170,7 @@ def create_agent(
             dtype=dtype,
             verbose=debug_verbosity if debug else 0,
             clip_gradient=clip_gradient,
+            decision_mode=decision_mode,
         )
     elif algorithm == "acer":
         agent = BatchedACERAgent(
@@ -200,7 +214,7 @@ def log_training(_run, callback_info):
 
 
 @ex.capture
-def train(env, agent, algorithm, policy, teacher, train_n_mc_target, train_n_mc_min, train_n_mc_max, train_mcts_mode, train_c_puct, train_steps, train_beamsize, pretrain_c_puct, pretrain_steps, pretrain_beamsize, pretrain_mcts_mode, pretrain_n_mc_max, pretrain_n_mc_min, pretrain_n_mc_target, imitation_steps):
+def train(env, agent, algorithm, policy, teacher, train_n_mc_target, train_n_mc_min, train_n_mc_max, train_planning_mode, train_c_puct, train_steps, train_beamsize, pretrain_c_puct, pretrain_steps, pretrain_beamsize, pretrain_planning_mode, pretrain_n_mc_max, pretrain_n_mc_min, pretrain_n_mc_target, imitation_steps):
     if algorithm in ["greedy", "random", "truth", "mle", "beamsearch"]:
         logger.info(f"No training necessary for algorithm {algorithm}")
     elif algorithm == "mcts" and policy in ["random", "likelihood"]:
@@ -208,13 +222,13 @@ def train(env, agent, algorithm, policy, teacher, train_n_mc_target, train_n_mc_
     elif algorithm == "mcts":
         # Pretraining
         logger.info(f"Starting MCTS pretraining for {pretrain_steps} steps")
-        agent.set_precision(pretrain_n_mc_target, pretrain_n_mc_min, pretrain_n_mc_max, pretrain_mcts_mode, pretrain_c_puct, pretrain_beamsize)
+        agent.set_precision(pretrain_n_mc_target, pretrain_n_mc_min, pretrain_n_mc_max, pretrain_planning_mode, pretrain_c_puct, pretrain_beamsize)
         _ = env.reset()
         agent.learn(total_timesteps=pretrain_steps, callback=log_training)
 
         # Main training
         logger.info(f"Starting MCTS training for {train_steps} steps")
-        agent.set_precision(train_n_mc_target, train_n_mc_min, train_n_mc_max, train_mcts_mode, train_c_puct, train_beamsize)
+        agent.set_precision(train_n_mc_target, train_n_mc_min, train_n_mc_max, train_planning_mode, train_c_puct, train_beamsize)
         _ = env.reset()
         agent.learn(total_timesteps=train_steps, callback=log_training)
     elif algorithm == "lfd":
@@ -230,7 +244,7 @@ def train(env, agent, algorithm, policy, teacher, train_n_mc_target, train_n_mc_
         # RL training
         logger.info(f"Starting MCTS training for {train_steps} steps")
         _ = env.reset()
-        agent.set_precision(train_n_mc_target, train_n_mc_min, train_n_mc_max, train_mcts_mode, train_c_puct, train_beamsize)
+        agent.set_precision(train_n_mc_target, train_n_mc_min, train_n_mc_max, train_planning_mode, train_c_puct, train_beamsize)
         agent.learn(total_timesteps=train_steps, callback=log_training)
     elif algorithm == "acer":
         logger.info(f"Starting ACER training for {pretrain_steps + train_steps} steps")
@@ -243,7 +257,7 @@ def train(env, agent, algorithm, policy, teacher, train_n_mc_target, train_n_mc_
 
 
 @ex.capture
-def eval(agent, env, name, algorithm, eval_n_mc_target, eval_n_mc_min, eval_n_mc_max, eval_mcts_mode, eval_c_puct, eval_repeats, eval_jets, eval_filename, redraw_eval_jets, run_name, eval_beamsize, _run):
+def eval(agent, env, name, algorithm, eval_n_mc_target, eval_n_mc_min, eval_n_mc_max, eval_planning_mode, eval_c_puct, eval_repeats, eval_jets, eval_filename, redraw_eval_jets, run_name, eval_beamsize, _run):
     # Set up evaluator
     logger.info("Starting evaluation")
     os.makedirs(os.path.dirname(eval_filename), exist_ok=True)
@@ -252,7 +266,7 @@ def eval(agent, env, name, algorithm, eval_n_mc_target, eval_n_mc_min, eval_n_mc
 
     # Evaluate
     if algorithm in ["mcts", "lfd-mcts"]:
-        agent.set_precision(eval_n_mc_target, eval_n_mc_min, eval_n_mc_max, eval_mcts_mode, eval_c_puct, eval_beamsize)
+        agent.set_precision(eval_n_mc_target, eval_n_mc_min, eval_n_mc_max, eval_planning_mode, eval_c_puct, eval_beamsize)
         log_likelihood, errors, likelihood_evaluations = evaluator.eval(name, agent, n_repeats=eval_repeats)
     elif algorithm == "lfd":
         log_likelihood, errors, likelihood_evaluations = evaluator.eval(name, agent, n_repeats=eval_repeats, mode="policy")
@@ -311,13 +325,14 @@ def save_agent(agent, algorithm, policy, run_name):
 def main():
     logger.info(f"Hi!")
 
+    check_config()
     setup_run()
     setup_logging()
     env = create_env()
     agent = create_agent(env=env)
 
-    with torch.autograd.detect_anomaly():  # Debug NaNs
-        train(env, agent)
+    # with torch.autograd.detect_anomaly():  # Debug NaNs
+    train(env, agent)
     save_agent(agent)
 
     result = eval(agent, env)
