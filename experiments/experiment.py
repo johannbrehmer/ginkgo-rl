@@ -25,6 +25,8 @@ logger = logging.getLogger(__name__)
 
 @ex.capture
 def check_config(algorithm, policy, teacher, env_type):
+    """ Checks that the configuration is valid """
+
     assert algorithm in ["mcts", "lfd", "lfd-mcts", "acer", "greedy", "random", "truth", "mle", "beamsearch"]
     if algorithm == "mcts":
         assert policy in ["nn", "random", "likelihood"]
@@ -35,6 +37,8 @@ def check_config(algorithm, policy, teacher, env_type):
 
 @ex.capture
 def setup_run(name, run_name, seed):
+    """ Sets up run, including the random seed  """
+
     logger.info(f"Setting up run {name}")
     os.makedirs(f"./data/runs/{run_name}/", exist_ok=True)
 
@@ -44,6 +48,8 @@ def setup_run(name, run_name, seed):
 
 @ex.capture
 def setup_logging(debug):
+    """ Sets up logging  """
+
     silence_list = ["matplotlib", "showerSim", "hierarchical-trellis"]
 
     for key in logging.Logger.manager.loggerDict:
@@ -75,6 +81,8 @@ def create_env(
     jetdir,
     max_n_try,
 ):
+    """ Sets up environment  """
+
     logger.info(f"Creating environment")
 
     if env_type == "1d":
@@ -127,6 +135,8 @@ def create_agent(
     clip_gradient,
     decision_mode,
 ):
+    """ Sets up agent  """
+
     logger.info(f"Setting up {algorithm} agent ")
 
     if algorithm == "mcts" and policy == "nn":
@@ -218,6 +228,8 @@ def create_agent(
 
 @ex.capture
 def log_training(_run, callback_info):
+    """ Callback for logging during training  """
+
     loss = callback_info.get("loss")
     reward = callback_info.get("reward")
     episode_length = callback_info.get("episode_length")
@@ -259,6 +271,8 @@ def train(
     pretrain_n_mc_target,
     imitation_steps,
 ):
+    """ Trains an agent """
+
     if algorithm in ["greedy", "random", "truth", "mle", "beamsearch"]:
         logger.info(f"No training necessary for algorithm {algorithm}")
     elif algorithm == "mcts" and policy in ["random", "likelihood"]:
@@ -330,6 +344,8 @@ def eval(
     eval_beamsize,
     _run,
 ):
+    """ Evaluates a trained agent """
+
     # Set up evaluator
     logger.info("Starting evaluation")
     os.makedirs(os.path.dirname(eval_filename), exist_ok=True)
@@ -390,6 +406,8 @@ def eval(
 
 @ex.capture
 def save_agent(agent, algorithm, policy, run_name):
+    """ Saves the state dict of an agent to file """
+
     if algorithm in ["mcts", "lfd", "lfd-mcts"] and policy == "nn" and agent is not None:
         filename = f"./data/runs/{run_name}/model.pty"
         logger.info(f"Saving model at {filename}")
@@ -401,6 +419,8 @@ def save_agent(agent, algorithm, policy, run_name):
 
 @ex.automain
 def main():
+    """ Main entry point for experiments """
+
     logger.info(f"Hi!")
 
     check_config()
@@ -409,7 +429,6 @@ def main():
     env = create_env()
     agent = create_agent(env=env)
 
-    # with torch.autograd.detect_anomaly():  # Debug NaNs
     train(env, agent)
     save_agent(agent)
 
