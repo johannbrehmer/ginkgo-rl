@@ -123,3 +123,4 @@ data/
 runs/
 logs/
 figures/
+*.pickle
