@@ -312,7 +312,7 @@ def eval(agent, env, name, algorithm, eval_n_mc_target, eval_n_mc_min, eval_n_mc
 
 @ex.capture
 def save_agent(agent, algorithm, policy, run_name):
-    if algorithm == "mcts" and policy == "nn" and agent is not None:
+    if algorithm in ["mcts", "lfd", "lfd-mcts"] and policy == "nn" and agent is not None:
         filename = f"./data/runs/{run_name}/model.pty"
         logger.info(f"Saving model at {filename}")
         torch.save(agent.state_dict(), filename)

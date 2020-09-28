@@ -7,6 +7,7 @@ import numpy as np
 from ginkgo_rl.utils.mcts import MCTSNode
 from .base import Agent
 from ..utils.nets import MultiHeadedMLP
+from ..utils.various import check_for_nans, NanException
 
 logger = logging.getLogger(__name__)
 
@@ -372,9 +373,22 @@ class PolicyMCTSAgent(BaseMCTSAgent):
         self.log_likelihood_factor = log_likelihood_factor
 
     def _evaluate_policy(self, state, legal_actions, step_rewards=None, action=None):
-        policy_input = self._prepare_policy_input(state, legal_actions, step_rewards=step_rewards)
-        (probs,) = self.actor(policy_input)
-        probs = self.softmax(probs).flatten()
+        try:
+            policy_input = self._prepare_policy_input(state, legal_actions, step_rewards=step_rewards)
+            check_for_nans("Policy input", policy_input)
+            (probs,) = self.actor(policy_input)
+            check_for_nans("Policy probabilities", probs)
+            probs = self.softmax(probs).flatten()
+        except NanException:
+            logger.error("NaNs appeared when evaluating the policy.")
+            logger.error(f"  state:             {state}")
+            logger.error(f"  legal actions:     {legal_actions}")
+            logger.error(f"  step rewards:      {step_rewards}")
+            logger.error(f"  action:            {action}")
+            logger.error(f"  policy weights:    {list(self.parameters())}")
+            logger.error(f"  mean weight:       {self.get_mean_weight()}")
+
+            raise
 
         if action is not None:
             assert action in legal_actions
@@ -384,7 +398,7 @@ class PolicyMCTSAgent(BaseMCTSAgent):
 
     def _prepare_policy_input(self, state, legal_actions, step_rewards=None):
         """ Prepares the input to the policy """
-
+        check_for_nans("Raw state", state)
         state_ = state.view(-1)
 
         if step_rewards is None or not step_rewards:
@@ -401,6 +415,7 @@ class PolicyMCTSAgent(BaseMCTSAgent):
             i, j = self.env.unwrap_action(action)
             pi = state[i, :]
             pj = state[j, :]
+            check_for_nans("Individual momenta", pi, pj)
 
             if self.log_likelihood_feature:
                 if log_likelihood is None:
@@ -409,18 +424,23 @@ class PolicyMCTSAgent(BaseMCTSAgent):
                     log_likelihood = 0.
                 log_likelihood = np.clip(log_likelihood, self.reward_range[0], self.reward_range[1])
                 log_likelihood_ = self.log_likelihood_factor * torch.tensor([log_likelihood]).to(self.device, self.dtype)
+                check_for_nans("Log likelihood as policy input", log_likelihood_)
 
                 combined_state = torch.cat((action_, pi, pj, log_likelihood_, state_), dim=0)
+                check_for_nans("Individual policy input entry", combined_state)
             else:
                 combined_state = torch.cat((action_, pi, pj, state_), dim=0)
+                check_for_nans("Individual policy input entry", combined_state)
 
             batch_states.append(combined_state.unsqueeze(0))
 
         batch_states = torch.cat(batch_states, dim=0)
+        check_for_nans("Concatenated policy input", batch_states)
         return batch_states
 
     def _train(self, log_prob):
         loss = - log_prob
+        check_for_nans("Loss", loss)
         self._gradient_step(loss)
         return loss.item()
 

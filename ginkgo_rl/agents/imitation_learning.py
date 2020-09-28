@@ -35,7 +35,7 @@ class ImitationLearningPolicyMCTSAgent(PolicyMCTSAgent):
         try:
             cat = Categorical(probs)
             action_id = cat.sample()
-        except RuntimeError as e:
+        except RuntimeError:
             logger.error(f"Error evaluating policy. Policy probabilities: {probs.detach().numpy()}")
             raise
 
@@ -93,6 +93,11 @@ class ImitationLearningPolicyMCTSAgent(PolicyMCTSAgent):
             rewards.append(next_reward)
             state = next_state
             reward = next_reward
+
+            if done == bool(demonstration_actions):  # Episode is done but still demo actions? Episode not done, but no demo actions any more? Something's afoot!
+                logger.warning(f"Inconsistent episode termination in imitation learning from teacher {teacher}.")
+                logger.warning(f"  Done flag: {done}")
+                logger.warning(f"  Demonstration actions left: {demonstration_actions}")
 
             if done or not demonstration_actions:
                 if callback is not None:

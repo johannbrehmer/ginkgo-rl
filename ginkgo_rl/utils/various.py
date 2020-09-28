@@ -70,3 +70,15 @@ def iter_flatten(iterable, max_depth=None):
                 yield f
         else:
             yield e
+
+
+class NanException(Exception):
+    pass
+
+
+def check_for_nans(label, *tensors):
+    for tensor in tensors:
+        if tensor is None:
+            continue
+        if torch.isnan(tensor).any():
+            raise NanException(f"{label} contains NaNs: {tensor}")
