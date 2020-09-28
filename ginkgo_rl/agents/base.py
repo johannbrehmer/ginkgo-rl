@@ -5,6 +5,7 @@ import logging
 from tqdm import trange
 
 from ..utils.replay_buffer import History
+from ..utils.various import check_for_nans
 
 logger = logging.getLogger(__name__)
 
@@ -142,6 +143,7 @@ class Agent(nn.Module):
     def _tensorize(self, array):
         tensor = array if isinstance(array, torch.Tensor) else torch.tensor(array)
         tensor = tensor.to(self.device, self.dtype)
+        check_for_nans(f"Tensorizing state {array}", tensor)
         return tensor
 
     def _gradient_step(self, loss):

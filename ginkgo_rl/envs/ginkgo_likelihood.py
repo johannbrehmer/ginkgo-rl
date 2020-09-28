@@ -228,6 +228,9 @@ class GinkgoLikelihoodEnv(Env):
 
         self.jet = self.sim(rate)[0]
         self.n = len(self.jet["leaves"])
+        if not np.all(np.isfinite(self.jet["leaves"])):
+            logger.warning(f"NaNs in newly simulated tree leaves!\n{self.jet['leaves']}")
+            self.jet["leaves"][np.any(~np.isfinite(self.jet["leaves"]), axis=1)] = self.padding_value
         self.state = self.padding_value * np.ones((self.n_max, 4))
         self.state[: self.n] = self.state_rescaling * self.jet["leaves"]
         self.is_leaf = [(i < self.n) for i in range(self.n_max)]
@@ -249,6 +252,10 @@ class GinkgoLikelihoodEnv(Env):
     def _sort_state(self):
         idx = sorted(list(range(self.n_max)), reverse=True, key=lambda i: self.state[i, 0])
         self.state = self.state[idx, :]
+
+        if not np.all(np.isfinite(self.state)):
+            logger.error(f"NaNs in simulator state after sorting!\n{self.state}")
+
         self.is_leaf = np.asarray(self.is_leaf, dtype=np.bool)[idx]
 
     def _compute_log_likelihood(self, action):
@@ -297,6 +304,9 @@ class GinkgoLikelihoodEnv(Env):
 
         self.state[-1, :] = self.padding_value * np.ones(4)
         self.is_leaf[-1] = False
+
+        if not np.all(np.isfinite(self.jet["leaves"])):
+            logger.error(f"NaNs in simulator state after merging!\n{self.state}")
 
         self.n -= 1
         self._sort_state()

@@ -86,6 +86,14 @@ class ImitationLearningPolicyMCTSAgent(PolicyMCTSAgent):
             loss = -agent_info["log_prob_demonstrator"]
             self._gradient_step(loss)
 
+            # For debugging, make sure that demonstrator action is actually legal
+            legal_actions = self._find_legal_actions(state)
+            if demonstration_action not in legal_actions:
+                logger.error("Demonstrator action is not legal?!")
+                logger.error(f"  State: {state}")
+                logger.error(f"  Legal actions: {legal_actions}")
+                logger.error(f"  Current demonstration action: {demonstration_action}")
+
             # Transition to next step
             next_state, next_reward, done, env_info = self.env.step(demonstration_action)
 
