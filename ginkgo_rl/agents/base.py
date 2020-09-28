@@ -12,7 +12,20 @@ logger = logging.getLogger(__name__)
 class Agent(nn.Module):
     """ Abstract base agent class """
 
-    def __init__(self, env, gamma=1.00, lr=1.0e-3, lr_decay=0.01, weight_decay=0.0, history_length=None, clip_gradient=None, dtype=torch.float, device=torch.device("cpu"), *args, **kwargs):
+    def __init__(
+        self,
+        env,
+        gamma=1.00,
+        lr=1.0e-3,
+        lr_decay=0.01,
+        weight_decay=0.0,
+        history_length=None,
+        clip_gradient=None,
+        dtype=torch.float,
+        device=torch.device("cpu"),
+        *args,
+        **kwargs,
+    ):
         self.env = env
         self.gamma = gamma
         self.device = device
@@ -26,7 +39,7 @@ class Agent(nn.Module):
         self.lr = lr
         self.lr_decay = lr_decay
         self.weight_decay = weight_decay
-        self.clip_gradient=clip_gradient
+        self.clip_gradient = clip_gradient
 
         super().__init__()
 
@@ -38,13 +51,15 @@ class Agent(nn.Module):
         self.train()
         if list(self.parameters()):
             self.optimizer = torch.optim.Adam(params=self.parameters(), lr=self.lr, weight_decay=self.weight_decay)
-            self.scheduler = torch.optim.lr_scheduler.ExponentialLR(self.optimizer, gamma=self.lr_decay**(1. / (total_timesteps + 1.0e-9)))
+            self.scheduler = torch.optim.lr_scheduler.ExponentialLR(
+                self.optimizer, gamma=self.lr_decay ** (1.0 / (total_timesteps + 1.0e-9))
+            )
         else:
             self.optimizer = None  # For non-NN methods
             self.scheduler = None
 
         state = self.env.reset()
-        reward = 0.
+        reward = 0.0
         rewards = []
         episode = 0
 
@@ -64,7 +79,7 @@ class Agent(nn.Module):
                 next_state=self._tensorize(next_state),
                 next_reward=next_reward,
                 num_episode=episode,
-                **agent_info
+                **agent_info,
             )
 
             episode_loss += loss
@@ -76,7 +91,16 @@ class Agent(nn.Module):
 
             if done:
                 if callback is not None:
-                    callback(callback_info={"episode": episode, "episode_length": episode_length, "loss": episode_loss, "reward": episode_reward, "likelihood_evaluations": agent_info["likelihood_evaluations"], "mean_abs_weight":self.get_mean_weight()})
+                    callback(
+                        callback_info={
+                            "episode": episode,
+                            "episode_length": episode_length,
+                            "loss": episode_loss,
+                            "reward": episode_reward,
+                            "likelihood_evaluations": agent_info["likelihood_evaluations"],
+                            "mean_abs_weight": self.get_mean_weight(),
+                        }
+                    )
 
                 episode += 1
                 episode_loss = 0.0

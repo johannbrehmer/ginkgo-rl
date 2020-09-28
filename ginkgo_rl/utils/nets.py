@@ -100,7 +100,9 @@ class CNN(nn.Module):
 class MultiHeadedMLP(nn.Module):
     """ MLP with multiple heads """
 
-    def __init__(self, input_size, hidden_sizes, head_sizes, activation, head_activations, linear=nn.Linear, init_sigma=1.0):
+    def __init__(
+        self, input_size, hidden_sizes, head_sizes, activation, head_activations, linear=nn.Linear, init_sigma=1.0
+    ):
         super().__init__()
         # print(hidden_sizes)
         if linear != nn.Linear:
@@ -136,7 +138,9 @@ class DuellingDQNNet(nn.Module):
     def __init__(self, input_size, hidden_sizes, out_size, activation, linear=nn.Linear, init_sigma=1.0):
 
         super().__init__()
-        self.mlp = MultiHeadedMLP(input_size, hidden_sizes, (1, out_size), activation, (None, None), linear=linear, init_sigma=init_sigma)
+        self.mlp = MultiHeadedMLP(
+            input_size, hidden_sizes, (1, out_size), activation, (None, None), linear=linear, init_sigma=init_sigma
+        )
 
     def forward(self, inputs):
         V, A = self.mlp(inputs)

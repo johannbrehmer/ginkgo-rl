@@ -22,7 +22,9 @@ class BatchedActorCriticAgent(Agent):
     def __init__(
         self,
         *args,
-        log_likelihood_feature=True, hidden_sizes=(100, 100,), activation=nn.ReLU(),
+        log_likelihood_feature=True,
+        hidden_sizes=(100, 100,),
+        activation=nn.ReLU(),
         log_epsilon=-20.0,
         **kwargs,
     ):
@@ -31,7 +33,13 @@ class BatchedActorCriticAgent(Agent):
         self.log_epsilon = log_epsilon
         self.log_likelihood_feature = log_likelihood_feature
 
-        self.actor_critic = MultiHeadedMLP(1 + self.state_length, hidden_sizes=hidden_sizes, head_sizes=(1, 1), activation=activation, head_activations=(None, None),)
+        self.actor_critic = MultiHeadedMLP(
+            1 + self.state_length,
+            hidden_sizes=hidden_sizes,
+            head_sizes=(1, 1),
+            activation=activation,
+            head_activations=(None, None),
+        )
         self.softmax = nn.Softmax(dim=0)
 
     def _predict(self, state):
@@ -42,7 +50,15 @@ class BatchedActorCriticAgent(Agent):
 
         return (
             legal_actions[action_id],
-            {"legal_actions": legal_actions, "action_id": action_id, "log_probs": log_probs, "log_prob": log_probs[action_id], "values": qs, "value": qs[action_id], "likelihood_evaluations": 0},
+            {
+                "legal_actions": legal_actions,
+                "action_id": action_id,
+                "log_probs": log_probs,
+                "log_prob": log_probs[action_id],
+                "values": qs,
+                "value": qs[action_id],
+                "likelihood_evaluations": 0,
+            },
         )
 
     def _evaluate(self, states, legal_actions_list):
@@ -91,7 +107,7 @@ class BatchedActorCriticAgent(Agent):
         return log_probs, qs
 
     def _act(self, log_probs, legal_actions):
-        probs = torch.exp(torch.clamp(log_probs, -20, 0.))
+        probs = torch.exp(torch.clamp(log_probs, -20, 0.0))
         cat = Categorical(probs)
         action_id = len(legal_actions)
         while action_id >= len(legal_actions):
@@ -104,7 +120,10 @@ class BatchedActorCriticAgent(Agent):
 
     def _pad(self, inputs, value=None):
         return torch.nn.functional.pad(
-            inputs, (0, self.num_actions - inputs.size()[-1]), mode="constant", value=self.log_epsilon if value is None else value
+            inputs,
+            (0, self.num_actions - inputs.size()[-1]),
+            mode="constant",
+            value=self.log_epsilon if value is None else value,
         )
 
     def _parse_action(self, action, from_which_env="sim"):
@@ -133,7 +152,18 @@ class BatchedActorCriticAgent(Agent):
 class BatchedACERAgent(BatchedActorCriticAgent):
     """ Largely following https://github.com/seungeunrho/minimalRL/blob/master/acer.py """
 
-    def __init__(self, *args, rollout_len=10, minibatch=5, truncate=1.0, warmup=100, r_factor=1.0, actor_weight=1.0, critic_weight=1.0, **kwargs):
+    def __init__(
+        self,
+        *args,
+        rollout_len=10,
+        minibatch=5,
+        truncate=1.0,
+        warmup=100,
+        r_factor=1.0,
+        actor_weight=1.0,
+        critic_weight=1.0,
+        **kwargs,
+    ):
         self.truncate = truncate
         self.warmup = warmup
         self.batchsize = minibatch
@@ -190,7 +220,9 @@ class BatchedACERAgent(BatchedActorCriticAgent):
 
         actor_loss = -rho_bar * log_prob_now_a * (q_ret - v)
         actor_loss = actor_loss.mean()
-        correction_loss = -correction_coeff * torch.exp(log_probs_then.detach()) * log_probs_now * (q.detach() - v)  # bias correction term
+        correction_loss = (
+            -correction_coeff * torch.exp(log_probs_then.detach()) * log_probs_now * (q.detach() - v)
+        )  # bias correction term
         correction_loss = correction_loss.sum(1).mean()
         critic_loss = self.critic_weight * torch.nn.SmoothL1Loss()(q_a, q_ret)
         loss = actor_loss + correction_loss + critic_loss

@@ -1,7 +1,7 @@
 import numpy as np
 
 
-class AffineNormalizer():
+class AffineNormalizer:
     def __init__(self, min_initial=None, max_initial=None, hard_min=None, hard_max=None, epsilon=0.001):
         self._min = min_initial
         self._max = max_initial

@@ -20,7 +20,7 @@ import beamSearchOptimal_invM as beam_search
 logger = logging.getLogger(__name__)
 
 
-class GinkgoEvaluator():
+class GinkgoEvaluator:
     def __init__(self, filename, env, redraw_existing_jets=False, n_jets=100):
         self.filename = filename
         self.env = env
@@ -53,7 +53,9 @@ class GinkgoEvaluator():
     def eval_beam_search(self, method, beam_size):
         log_likelihoods = [[self._compute_beam_search_log_likelihood(jet, beam_size)] for jet in self.jets]
         illegal_actions = [[0] for _ in self.jets]
-        likelihood_evaluations = [[self._compute_beam_search_likelihood_evaluations(jet, beam_size)] for jet in self.jets]
+        likelihood_evaluations = [
+            [self._compute_beam_search_likelihood_evaluations(jet, beam_size)] for jet in self.jets
+        ]
         self._update_results(method, log_likelihoods, illegal_actions)
         return log_likelihoods, illegal_actions, likelihood_evaluations
 
@@ -101,22 +103,36 @@ class GinkgoEvaluator():
 
         lines = []
         lines.append("")
-        lines.append("-"*(lengths[0] + lengths[1] + lengths[2] + (3-1)*3))
+        lines.append("-" * (lengths[0] + lengths[1] + lengths[2] + (3 - 1) * 3))
         lines.append(f"{'Method':>{lengths[0]}s} | {'Log p':>{lengths[1]}s} | {'Err':>{lengths[2]}s}")
-        lines.append("-"*(lengths[0] + lengths[1] + lengths[2] + (3-1)*3))
+        lines.append("-" * (lengths[0] + lengths[1] + lengths[2] + (3 - 1) * 3))
 
-        for method, mean_log_likelihood, mean_illegals in sorted(results, key=lambda x : x[1], reverse=True):
-            lines.append(f"{method:>{lengths[0]}s} | {mean_log_likelihood:>{lengths[1]}.{lengths[1] - 4}f} | {mean_illegals:>{lengths[2]}.{lengths[2] - 2}f}")
+        for method, mean_log_likelihood, mean_illegals in sorted(results, key=lambda x: x[1], reverse=True):
+            lines.append(
+                f"{method:>{lengths[0]}s} | {mean_log_likelihood:>{lengths[1]}.{lengths[1] - 4}f} | {mean_illegals:>{lengths[2]}.{lengths[2] - 2}f}"
+            )
 
-        lines.append("-"*(lengths[0] + lengths[1] + lengths[2] + (3-1)*3))
+        lines.append("-" * (lengths[0] + lengths[1] + lengths[2] + (3 - 1) * 3))
         lines.append("")
 
         return "\n".join(lines)
 
-    def plot_log_likelihoods(self, cols=2, rows=4, ymax=0.5, deltax_min=1., deltax_max=10., xbins=25, panelsize=4., filename=None, linestyles=["-", "--", ":", "-."], colors=[f"C{i}" for i in range(9)]):
+    def plot_log_likelihoods(
+        self,
+        cols=2,
+        rows=4,
+        ymax=0.5,
+        deltax_min=1.0,
+        deltax_max=10.0,
+        xbins=25,
+        panelsize=4.0,
+        filename=None,
+        linestyles=["-", "--", ":", "-."],
+        colors=[f"C{i}" for i in range(9)],
+    ):
         colors = colors * 10
         linestyles = linestyles * 10
-        fig = plt.figure(figsize=(rows*panelsize, cols*panelsize))
+        fig = plt.figure(figsize=(rows * panelsize, cols * panelsize))
 
         for j in range(self.n_jets):
             if j > cols * rows:
@@ -132,14 +148,34 @@ class GinkgoEvaluator():
 
             ls_counter = 0
             for i, (name, logp, _) in enumerate(self.get_results()):
-                logp_ = np.clip(logp, xmin + 1.e-9, xmax - 1.e-9)
+                logp_ = np.clip(logp, xmin + 1.0e-9, xmax - 1.0e-9)
 
                 if len(logp[j]) == 1:
-                    plt.plot([logp_[j][0], logp_[j][0]], [0., ymax], color=colors[i], ls=linestyles[ls_counter], label=name)
+                    plt.plot(
+                        [logp_[j][0], logp_[j][0]], [0.0, ymax], color=colors[i], ls=linestyles[ls_counter], label=name
+                    )
                     ls_counter += 1
                 else:
-                    plt.hist(logp_[j], histtype="stepfilled", range=(xmin, xmax), color=colors[i], bins=xbins, lw=1.5, density=True, alpha=0.15)
-                    plt.hist(logp_[j], histtype="step", range=(xmin, xmax), bins=xbins, color=colors[i], lw=1.5, density=True, label=name)
+                    plt.hist(
+                        logp_[j],
+                        histtype="stepfilled",
+                        range=(xmin, xmax),
+                        color=colors[i],
+                        bins=xbins,
+                        lw=1.5,
+                        density=True,
+                        alpha=0.15,
+                    )
+                    plt.hist(
+                        logp_[j],
+                        histtype="step",
+                        range=(xmin, xmax),
+                        bins=xbins,
+                        color=colors[i],
+                        lw=1.5,
+                        density=True,
+                        label=name,
+                    )
 
             if j == 0:
                 plt.legend()
@@ -148,7 +184,7 @@ class GinkgoEvaluator():
             plt.ylabel("Histogram")
 
             plt.xlim(xmin, xmax)
-            plt.ylim(0., ymax)
+            plt.ylim(0.0, ymax)
 
         plt.tight_layout()
         if filename is not None:
@@ -161,11 +197,11 @@ class GinkgoEvaluator():
 
     def _save(self):
         data = {"n_jets": self.n_jets, "jets": self.jets}
-        with open(self.filename, 'wb') as file:
+        with open(self.filename, "wb") as file:
             pickle.dump(data, file)
 
     def _load(self):
-        with open(self.filename, 'rb') as file:
+        with open(self.filename, "rb") as file:
             data = pickle.load(file)
 
         self.n_jets = data["n_jets"]
@@ -181,14 +217,16 @@ class GinkgoEvaluator():
             jets.append(self.env.get_internal_state())
 
         sizes = np.array([len(jet[0]["leaves"]) for jet in jets])
-        logger.info(f"  Generated jets with min size {np.min(sizes)}, mean size {np.mean(sizes)}, max size {np.max(sizes)}")
+        logger.info(
+            f"  Generated jets with min size {np.min(sizes)}, mean size {np.mean(sizes)}, max size {np.max(sizes)}"
+        )
 
         return jets
 
     def _episode(self, model, mode=None):
         state = self.env.get_state()
         done = False
-        log_likelihood = 0.
+        log_likelihood = 0.0
         errors = 0
         reward = 0.0
         likelihood_evaluations = 0
@@ -218,7 +256,9 @@ class GinkgoEvaluator():
 
             # Update model: this only works for *our* models, not the baselines
             try:
-                model.update(state, reward, action, done, next_state, next_reward=next_reward, num_episode=0, **agent_info)
+                model.update(
+                    state, reward, action, done, next_state, next_reward=next_reward, num_episode=0, **agent_info
+                )
             except:
                 pass
 

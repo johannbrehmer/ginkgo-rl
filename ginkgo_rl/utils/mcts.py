@@ -15,7 +15,11 @@ class MCTSNode:
 
         self.reward_min = reward_min
         self.reward_max = reward_max
-        self.reward_normalizer = AffineNormalizer(hard_min=reward_min, hard_max=reward_max) if reward_normalizer is None else reward_normalizer
+        self.reward_normalizer = (
+            AffineNormalizer(hard_min=reward_min, hard_max=reward_max)
+            if reward_normalizer is None
+            else reward_normalizer
+        )
 
         self.terminal = None  # None means undetermined
         self.n = 0  # Total visit count
@@ -35,7 +39,14 @@ class MCTSNode:
             if action in self.children:
                 continue
 
-            self.children[action] = MCTSNode(self, self.path + [action], self.reward_normalizer, reward_min=self.reward_min, reward_max=self.reward_max, q_step=reward)
+            self.children[action] = MCTSNode(
+                self,
+                self.path + [action],
+                self.reward_normalizer,
+                reward_min=self.reward_min,
+                reward_max=self.reward_max,
+                q_step=reward,
+            )
 
     def set_terminal(self, terminal):
         self.terminal = terminal
@@ -84,7 +95,7 @@ class MCTSNode:
         assert len(pucts) > 0
 
         # Pick highest
-        best_puct = - float("inf")
+        best_puct = -float("inf")
         choice = None
         for i, puct in enumerate(pucts):
             if puct > best_puct or choice is None:
@@ -95,7 +106,7 @@ class MCTSNode:
         return list(self.children.keys())[choice]
 
     def select_best(self, mode="max"):
-        best_q = - float("inf")
+        best_q = -float("inf")
         choice = None
 
         for action, child in self.children.items():
@@ -108,7 +119,7 @@ class MCTSNode:
         return choice
 
     def select_beam_search(self, beam_size):
-        choices = sorted(list(self.children.keys()), key=lambda x : self.children[x].q_step, reverse=True)[:beam_size]
+        choices = sorted(list(self.children.keys()), key=lambda x: self.children[x].q_step, reverse=True)[:beam_size]
         return choices
 
     def select_greedy(self):
@@ -126,13 +137,15 @@ class MCTSNode:
 
     def _compute_pucts(self, policy_probs=None, mode="mean", c_puct=1.0):
         if policy_probs is None:  # By default assume a uniform policy
-            policy_probs = 1. / len(self)
+            policy_probs = 1.0 / len(self)
 
         assert len(policy_probs) == len(self) > 0
 
         n_children = torch.tensor([child.n for child in self.children.values()], dtype=policy_probs.dtype)
-        q_children = torch.tensor([child.get_reward(mode=mode) for child in self.children.values()], dtype=policy_probs.dtype)
-        pucts = q_children + c_puct * policy_probs * (self.n + 1.e-9) ** 0.5 / (1. + n_children)
+        q_children = torch.tensor(
+            [child.get_reward(mode=mode) for child in self.children.values()], dtype=policy_probs.dtype
+        )
+        pucts = q_children + c_puct * policy_probs * (self.n + 1.0e-9) ** 0.5 / (1.0 + n_children)
 
         assert len(n_children) == len(self) > 0
         assert len(q_children) == len(self) > 0

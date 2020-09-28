@@ -29,26 +29,26 @@ def config():
 # noinspection PyUnusedLocal
 @ex.config
 def env_config():
-    illegal_reward=-100.0
-    illegal_actions_patience=3
+    illegal_reward = -100.0
+    illegal_actions_patience = 3
 
-    n_max=20
-    n_min=2
-    n_target=1
+    n_max = 20
+    n_min = 2
+    n_target = 1
 
-    min_reward=-100.0
-    state_rescaling=0.01
-    padding_value=-1.0
+    min_reward = -100.0
+    state_rescaling = 0.01
+    padding_value = -1.0
 
-    w_jet=True
-    w_rate=3.0
-    qcd_rate=1.5
-    pt_min=4.0 ** 2
-    qcd_mass=30.0
-    w_mass=80.0
-    jet_momentum=400.0
-    jetdir=(1, 1, 1)
-    max_n_try=1000
+    w_jet = True
+    w_rate = 3.0
+    qcd_rate = 1.5
+    pt_min = 4.0 ** 2
+    qcd_mass = 30.0
+    w_mass = 80.0
+    jet_momentum = 400.0
+    jetdir = (1, 1, 1)
+    max_n_try = 1000
 
 
 # noinspection PyUnusedLocal
@@ -58,9 +58,12 @@ def agent_config():
     log_likelihood_policy_input = True
     decision_mode = "max_mcts"  # {"max_reward", "max_puct", "mean_puct"}
 
-    reward_range = (-500., 0.)
+    reward_range = (-500.0, 0.0)
     history_length = None
-    hidden_sizes = (100, 100,)
+    hidden_sizes = (
+        100,
+        100,
+    )
     activation = torch.nn.ReLU()
 
 

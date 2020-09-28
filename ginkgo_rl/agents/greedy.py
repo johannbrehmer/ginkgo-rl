@@ -7,12 +7,7 @@ logger = logging.getLogger(__name__)
 
 
 class GreedyAgent(Agent):
-    def __init__(
-        self,
-        *args,
-        verbose=0,
-        **kwargs
-    ):
+    def __init__(self, *args, verbose=0, **kwargs):
         super().__init__(*args, **kwargs)
         self.verbose = verbose
         self.sim_env = copy.deepcopy(self.env)
@@ -57,8 +52,5 @@ class GreedyAgent(Agent):
     def _report_decision(self, legal_actions, log_likelihoods, chosen_action):
         logger.debug(f"Greedy results:")
         for i, (action_, log_likelihood) in enumerate(zip(legal_actions, log_likelihoods)):
-            is_chosen = '*' if action_ == chosen_action else ' '
-            logger.debug(
-                f" {is_chosen} {action_:>2d}: "
-                f"log likelihood = {log_likelihood:6.2f}"
-            )
+            is_chosen = "*" if action_ == chosen_action else " "
+            logger.debug(f" {is_chosen} {action_:>2d}: " f"log likelihood = {log_likelihood:6.2f}")

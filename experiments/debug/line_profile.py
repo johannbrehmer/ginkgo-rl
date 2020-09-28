@@ -13,9 +13,7 @@ logger = logging.getLogger(__name__)
 if __name__ == "__main__":
     # Logging setup
     logging.basicConfig(
-        format='%(asctime)-5.5s %(name)-20.20s %(levelname)-7.7s %(message)s',
-        datefmt='%H:%M',
-        level=logging.DEBUG
+        format="%(asctime)-5.5s %(name)-20.20s %(levelname)-7.7s %(message)s", datefmt="%H:%M", level=logging.DEBUG
     )
     for key in logging.Logger.manager.loggerDict:
         if "ginkgo_rl" not in key:

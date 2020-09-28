@@ -31,7 +31,7 @@ class ImitationLearningPolicyMCTSAgent(PolicyMCTSAgent):
         step_rewards = [self._parse_action(action, from_which_env="real") for action in legal_actions]
 
         probs = self._evaluate_policy(state, legal_actions, step_rewards)
-        probs = torch.clamp(probs, 1.e-6, 1.0)
+        probs = torch.clamp(probs, 1.0e-6, 1.0)
         try:
             cat = Categorical(probs)
             action_id = cat.sample()
@@ -50,7 +50,7 @@ class ImitationLearningPolicyMCTSAgent(PolicyMCTSAgent):
             "log_probs": log_probs,
             "log_prob": log_probs[action_id],
             "log_prob_demonstrator": log_prob_demo,
-            "likelihood_evaluations": self.episode_likelihood_evaluations
+            "likelihood_evaluations": self.episode_likelihood_evaluations,
         }
         return action, info
 
@@ -63,14 +63,16 @@ class ImitationLearningPolicyMCTSAgent(PolicyMCTSAgent):
         # Prepare training
         self.train()
         self.optimizer = torch.optim.Adam(params=self.parameters(), lr=self.lr, weight_decay=self.weight_decay)
-        self.scheduler = torch.optim.lr_scheduler.ExponentialLR(self.optimizer, gamma=self.lr_decay**(1. / (total_timesteps + 1.0e-9)))
+        self.scheduler = torch.optim.lr_scheduler.ExponentialLR(
+            self.optimizer, gamma=self.lr_decay ** (1.0 / (total_timesteps + 1.0e-9))
+        )
 
         demonstration_actions = None
         while demonstration_actions is None:
             state = self.env.reset()
             demonstration_actions = deque(self._find_demonstration_actions(teacher=teacher))
 
-        reward = 0.
+        reward = 0.0
         rewards = []
         episode = 0
         episode_loss = 0.0
@@ -81,7 +83,7 @@ class ImitationLearningPolicyMCTSAgent(PolicyMCTSAgent):
             # Imitation learning
             demonstration_action = demonstration_actions.popleft()
             _, agent_info = self._predict_policy(state, demonstrator_action=demonstration_action)
-            loss = - agent_info["log_prob_demonstrator"]
+            loss = -agent_info["log_prob_demonstrator"]
             self._gradient_step(loss)
 
             # Transition to next step
@@ -94,14 +96,25 @@ class ImitationLearningPolicyMCTSAgent(PolicyMCTSAgent):
             state = next_state
             reward = next_reward
 
-            if done == bool(demonstration_actions):  # Episode is done but still demo actions? Episode not done, but no demo actions any more? Something's afoot!
+            if done == bool(
+                demonstration_actions
+            ):  # Episode is done but still demo actions? Episode not done, but no demo actions any more? Something's afoot!
                 logger.warning(f"Inconsistent episode termination in imitation learning from teacher {teacher}.")
                 logger.warning(f"  Done flag: {done}")
                 logger.warning(f"  Demonstration actions left: {demonstration_actions}")
 
             if done or not demonstration_actions:
                 if callback is not None:
-                    callback(callback_info={"episode": episode, "episode_length": episode_length, "loss": episode_loss, "reward": episode_reward, "likelihood_evaluations": agent_info["likelihood_evaluations"], "mean_abs_weight":self.get_mean_weight()})
+                    callback(
+                        callback_info={
+                            "episode": episode,
+                            "episode_length": episode_length,
+                            "loss": episode_loss,
+                            "reward": episode_reward,
+                            "likelihood_evaluations": agent_info["likelihood_evaluations"],
+                            "mean_abs_weight": self.get_mean_weight(),
+                        }
+                    )
 
                 episode += 1
                 episode_loss = 0.0
@@ -128,9 +141,11 @@ class ImitationLearningPolicyMCTSAgent(PolicyMCTSAgent):
         else:
             raise ValueError(teacher)
 
-        original_momenta = jet['content']  # original_momenta[i] are unmodified four-momenta of particle with ID i
-        original_children = jet['tree']  # original_children[i] are original IDs of children of particle with ID i
-        original_parents = {tuple(sorted([i, j])): parent for parent, (i, j) in enumerate(original_children) if i >= 0 and j >= 0}  # original_parent[(i, j)] is parent ID of children IDs (i, j)
+        original_momenta = jet["content"]  # original_momenta[i] are unmodified four-momenta of particle with ID i
+        original_children = jet["tree"]  # original_children[i] are original IDs of children of particle with ID i
+        original_parents = {
+            tuple(sorted([i, j])): parent for parent, (i, j) in enumerate(original_children) if i >= 0 and j >= 0
+        }  # original_parent[(i, j)] is parent ID of children IDs (i, j)
 
         logger.debug("Children list:")
         for parent, (i, j) in enumerate(original_children):
@@ -140,7 +155,9 @@ class ImitationLearningPolicyMCTSAgent(PolicyMCTSAgent):
         for (i, j), parent in original_parents.items():
             logger.debug(f"  Children {i}, {j} -> parent {parent}")
 
-        particles = []  # list of tuples (original ID, four-momenta) of all particles at current state, sorted by the energy
+        particles = (
+            []
+        )  # list of tuples (original ID, four-momenta) of all particles at current state, sorted by the energy
         actions = []  # List of true actions
 
         # Find leaves
@@ -150,8 +167,10 @@ class ImitationLearningPolicyMCTSAgent(PolicyMCTSAgent):
 
         while len(particles) > 1:
             # Sort particles by energy
-            particles = sorted(particles, reverse=True, key=lambda x : x[1][0])
-            particle_dict = {key : sorted_id for sorted_id, (key, _) in enumerate(particles)}  # keys are particle ID, values are position in energy-sorted list
+            particles = sorted(particles, reverse=True, key=lambda x: x[1][0])
+            particle_dict = {
+                key: sorted_id for sorted_id, (key, _) in enumerate(particles)
+            }  # keys are particle ID, values are position in energy-sorted list
 
             logger.debug("Considering next clustering step.")
             logger.debug("  Particle dictionary:")
@@ -189,7 +208,7 @@ class ImitationLearningPolicyMCTSAgent(PolicyMCTSAgent):
                 if idx == j:
                     del particles[pos]
                     break
-            parent_ij = original_parents[(i,j)]
+            parent_ij = original_parents[(i, j)]
             logger.debug(f"  Removing particles {i} and {j} from list and adding {parent_ij}")
             particles.append((parent_ij, original_momenta[parent_ij]))
 

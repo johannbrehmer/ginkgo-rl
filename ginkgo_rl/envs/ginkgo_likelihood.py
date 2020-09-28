@@ -101,8 +101,12 @@ class GinkgoLikelihoodEnv(Env):
         # self._simulate()
 
         # Spaces
-        self.action_space = MultiDiscrete((self.n_max, self.n_max))  # Tuple((Discrete(self.n_max), Discrete(self.n_max)))
-        self.observation_space = Box(low=self.padding_value, high=state_rescaling * max(self.jet_momentum), shape=(self.n_max, 4), dtype=np.float)
+        self.action_space = MultiDiscrete(
+            (self.n_max, self.n_max)
+        )  # Tuple((Discrete(self.n_max), Discrete(self.n_max)))
+        self.observation_space = Box(
+            low=self.padding_value, high=state_rescaling * max(self.jet_momentum), shape=(self.n_max, 4), dtype=np.float
+        )
 
     def reset(self):
         """ Resets the state of the environment and returns an initial observation. """
@@ -153,7 +157,9 @@ class GinkgoLikelihoodEnv(Env):
             if self.illegal_action_counter > self.illegal_actions_patience:
                 new_action = self._draw_random_legal_action()
                 if self.verbose:
-                    logger.debug(f"This is the {self.illegal_action_counter}th illegal action in a row. That's enough. Executing random action {new_action} instead.")
+                    logger.debug(
+                        f"This is the {self.illegal_action_counter}th illegal action in a row. That's enough. Executing random action {new_action} instead."
+                    )
 
                 reward += self._compute_log_likelihood(new_action)
                 self._merge(new_action)
@@ -168,7 +174,9 @@ class GinkgoLikelihoodEnv(Env):
                 self.illegal_action_counter = 0
             else:
                 if self.verbose:
-                    logger.debug(f"This is the {self.illegal_action_counter}th illegal action in a row. Try again. (Environment state is unchanged.)")
+                    logger.debug(
+                        f"This is the {self.illegal_action_counter}th illegal action in a row. Try again. (Environment state is unchanged.)"
+                    )
 
                 done = False
                 info = {
@@ -211,7 +219,9 @@ class GinkgoLikelihoodEnv(Env):
     def _simulate(self):
         """ Initiates an episode by simulating a new jet """
 
-        rate = torch.tensor([self.w_rate, self.qcd_rate]) if self.w_jet else torch.tensor([self.qcd_rate, self.qcd_rate])
+        rate = (
+            torch.tensor([self.w_rate, self.qcd_rate]) if self.w_jet else torch.tensor([self.qcd_rate, self.qcd_rate])
+        )
         jets = self.sim(rate)
         if not jets:
             raise RuntimeError(f"Could not generate any jets: {jets}")
@@ -237,7 +247,7 @@ class GinkgoLikelihoodEnv(Env):
         return self._check_acceptability(action) and i != j and i < self.n and j < self.n
 
     def _sort_state(self):
-        idx = sorted(list(range(self.n_max)), reverse=True, key=lambda i : self.state[i, 0])
+        idx = sorted(list(range(self.n_max)), reverse=True, key=lambda i: self.state[i, 0])
         self.state = self.state[idx, :]
         self.is_leaf = np.asarray(self.is_leaf, dtype=np.bool)[idx]
 
@@ -253,7 +263,9 @@ class GinkgoLikelihoodEnv(Env):
         if self.n == 2 and self.w_jet:
             lam = self.jet["LambdaRoot"]  # W jets have a different lambda for the first split
 
-        log_likelihood = ginkgo_log_likelihood(self.state[i] / self.state_rescaling, ti, self.state[j] / self.state_rescaling, tj, t_cut=t_cut, lam=lam)
+        log_likelihood = ginkgo_log_likelihood(
+            self.state[i] / self.state_rescaling, ti, self.state[j] / self.state_rescaling, tj, t_cut=t_cut, lam=lam
+        )
         try:
             log_likelihood = log_likelihood.item()
         except:
@@ -263,7 +275,9 @@ class GinkgoLikelihoodEnv(Env):
             log_likelihood = np.clip(log_likelihood, self.min_reward, None)
 
         if self.verbose:
-            logger.debug(f"Computing log likelihood of action {action}: ti = {ti}, tj = {tj}, t_cut = {t_cut}, lam = {lam} -> log likelihood = {log_likelihood}")
+            logger.debug(
+                f"Computing log likelihood of action {action}: ti = {ti}, tj = {tj}, t_cut = {t_cut}, lam = {lam} -> log likelihood = {log_likelihood}"
+            )
             # logger.debug(f"Computing log likelihood of action {action}: log likelihood = {log_likelihood}")
 
         return log_likelihood
@@ -279,7 +293,7 @@ class GinkgoLikelihoodEnv(Env):
 
         for k in range(j, self.n_max - 1):
             self.state[k, :] = self.state[k + 1, :]
-            self.is_leaf[k] = self.is_leaf[k+1]
+            self.is_leaf[k] = self.is_leaf[k + 1]
 
         self.state[-1, :] = self.padding_value * np.ones(4)
         self.is_leaf[-1] = False
@@ -325,7 +339,7 @@ class GinkgoLikelihood1DEnv(GinkgoLikelihoodEnv):
     def wrap_action(self, action_tuple):
         assert self._check_acceptability(action_tuple)
         i, j = max(action_tuple), min(action_tuple)
-        return i  * (i - 1) // 2 + j
+        return i * (i - 1) // 2 + j
 
     def unwrap_action(self, action_int):
         i = 1
