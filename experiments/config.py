@@ -10,24 +10,16 @@ __all__ = ["ex", "config", "env_config", "agent_config", "train_config", "eval_c
 # noinspection PyUnusedLocal
 @ex.config
 def config():
-    algorithm = "mcts"
-    policy = "nn"
-    teacher = "truth"
-    env_type = "1d"
+    algorithm = "mcts"  # {"mcts", "lfd", "lfd-mcts", "acer", "greedy", "random", "truth", "mle", "beamsearch"}
+    policy = "nn"  # {"nn", "random", "likelihood"}
+    teacher = "truth"  # {"truth", "mle"}
+    env_type = "1d"  # for now, only {"1d"}
 
     if algorithm == "mcts":
         name = f"{algorithm}_{policy}"
     else:
         name = algorithm
     run_name = f"{name}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
-
-    # Check config
-    assert algorithm in ["mcts", "lfd", "lfd-mcts", "acer", "greedy", "random", "truth", "mle", "beamsearch"]
-    if algorithm == "mcts":
-        assert policy in ["nn", "random", "likelihood"]
-    if algorithm in ["lfd", "lfd-mcts"]:
-        assert teacher in ["truth", "mle"]
-    assert env_type == "1d"  # For now, 2d env is not supported
 
     # Set up observer
     ex.observers.append(FileStorageObserver(f"./data/runs/{run_name}"))
@@ -149,7 +141,7 @@ def debug_mcts():
 def debug_lfd():
     algorithm = "lfd"
     name = "debug"
-    debug = True
+    debug = False
 
     imitation_steps = 10000
 
@@ -309,6 +301,50 @@ def acer():
 
 
 @ex.named_config
+def mcts_exploit():
+    algorithm = "mcts"
+    policy = "nn"
+    name = "mcts_s_exploit"
+
+    pretrain_beamsize = 3
+    pretrain_n_mc_target = 1
+    pretrain_n_mc_max = 10
+    pretrain_c_puct = 0.1
+
+    train_beamsize = 5
+    train_n_mc_target = 1
+    train_n_mc_max = 20
+    train_c_puct = 0.1
+
+    eval_beamsize = 5
+    eval_n_mc_target = 1
+    eval_n_mc_max = 20
+    eval_c_puct = 0.1
+
+
+@ex.named_config
+def mcts_explore():
+    algorithm = "mcts"
+    policy = "nn"
+    name = "mcts_s_explore"
+
+    pretrain_beamsize = 3
+    pretrain_n_mc_target = 1
+    pretrain_n_mc_max = 10
+    pretrain_c_puct = 10.0
+
+    train_beamsize = 5
+    train_n_mc_target = 1
+    train_n_mc_max = 20
+    train_c_puct = 10.0
+
+    eval_beamsize = 5
+    eval_n_mc_target = 1
+    eval_n_mc_max = 20
+    eval_c_puct = 10.0
+
+
+@ex.named_config
 def mcts_raw():
     algorithm = "mcts"
     policy = "nn"
@@ -379,3 +415,16 @@ def mcts_likelihood():
     eval_n_mc_target = 1
     eval_n_mc_max = 20
     eval_beamsize = 5
+
+
+@ex.capture
+def check_config(algorithm, policy, teacher, env_type):
+    assert algorithm in ["mcts", "lfd", "lfd-mcts", "acer", "greedy", "random", "truth", "mle", "beamsearch"]
+    if algorithm == "mcts":
+        assert policy in ["nn", "random", "likelihood"]
+    if algorithm in ["lfd", "lfd-mcts"]:
+        assert teacher in ["truth", "mle"]
+    assert env_type == "1d"  # For now, 2d env is not supported
+
+
+check_config()

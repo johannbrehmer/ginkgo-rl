@@ -313,7 +313,8 @@ def main():
     env = create_env()
     agent = create_agent(env=env)
 
-    train(env, agent)
+    with torch.autograd.detect_anomaly():  # Debug NaNs
+        train(env, agent)
     save_agent(agent)
 
     result = eval(agent, env)

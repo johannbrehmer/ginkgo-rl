@@ -193,6 +193,14 @@ class BaseMCTSAgent(Agent):
                     step_rewards = [self._parse_action(action, from_which_env="sim") for action in actions]
                     node.expand(actions, step_rewards=step_rewards)
 
+                    if not node.children:
+                        logger.warning(
+                            f"Did not find any legal actions even though state was not recognized as terminal. "
+                            f"Node path: {node.path}. Children: {node.children}. State: {this_state}. Actions: {actions}."
+                        )
+                        node.set_terminal(True)
+                        break
+
                 # Select
                 policy_probs = self._evaluate_policy(this_state, node.children.keys(), step_rewards=node.children_q_steps())
                 action = node.select_puct(policy_probs, mode=self.mcts_mode, c_puct=self.c_puct)
@@ -346,8 +354,8 @@ class PolicyMCTSAgent(BaseMCTSAgent):
         self.log_likelihood_factor = log_likelihood_factor
 
     def _evaluate_policy(self, state, legal_actions, step_rewards=None, action=None):
-        batch_states = self._batch_state(state, legal_actions, step_rewards=step_rewards)
-        (probs,) = self.actor(batch_states)
+        policy_input = self._prepare_policy_input(state, legal_actions, step_rewards=step_rewards)
+        (probs,) = self.actor(policy_input)
         probs = self.softmax(probs).flatten()
 
         if action is not None:
@@ -356,12 +364,18 @@ class PolicyMCTSAgent(BaseMCTSAgent):
 
         return probs
 
-    def _batch_state(self, state, legal_actions, step_rewards=None):
+    def _prepare_policy_input(self, state, legal_actions, step_rewards=None):
+        """ Prepares the input to the policy """
+
         state_ = state.view(-1)
 
-        if step_rewards is None:
+        if step_rewards is None or not step_rewards:
             step_rewards = [None for _ in legal_actions]
         batch_states = []
+
+        assert legal_actions
+        assert step_rewards
+        assert len(legal_actions) == len(step_rewards)
 
         for action, log_likelihood in zip(legal_actions, step_rewards):
             action_ = self.action_factor * torch.tensor([action]).to(self.device, self.dtype)
