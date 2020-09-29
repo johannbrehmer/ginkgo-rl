@@ -16,13 +16,12 @@ def config():
     algorithm = "mcts"  # {"mcts", "lfd", "lfd-mcts", "acer", "greedy", "random", "truth", "mle", "beamsearch"}
     policy = "nn"  # {"nn", "random", "likelihood"}
     teacher = "truth"  # {"truth", "mle"}
-    env_type = "1d"  # for now, only {"1d"}
 
-    if algorithm == "mcts":
-        name = f"{algorithm}_{policy}"
-    else:
-        name = algorithm
-    run_name = f"{name}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    env_type = "1d"  # for now, only {"1d"}
+    seed = 24927  # 1971248 was used for first round
+
+    name = f"{algorithm}_{policy}" if algorithm == "mcts" else algorithm
+    run_name = f"{name}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}_{seed}"
 
     database = True
     ex.observers.append(FileStorageObserver(f"./data/runs/{run_name}"))
@@ -120,7 +119,6 @@ def eval_config():
 def technical_config():
     device = torch.device("cpu")
     dtype = torch.float
-    seed = 24927  # 1971248 was used for first round
     debug = False
     debug_verbosity = 1
 
