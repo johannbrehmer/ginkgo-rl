@@ -1,11 +1,10 @@
 import numpy as np
 from gym import Env
-from gym.spaces import Discrete, Box, Tuple, MultiDiscrete
+from gym.spaces import Discrete, Box, MultiDiscrete
 import logging
 from showerSim.invMass_ginkgo import Simulator as GinkgoSim
 from showerSim.likelihood_invM import split_logLH as ginkgo_log_likelihood
 import torch
-import itertools
 import copy
 
 logger = logging.getLogger(__name__)
