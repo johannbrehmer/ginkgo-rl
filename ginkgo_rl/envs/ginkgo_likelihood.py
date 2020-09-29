@@ -263,10 +263,6 @@ class GinkgoLikelihoodEnv(Env):
     def _sort_state(self):
         idx = sorted(list(range(self.n_max)), reverse=True, key=lambda i: self.state[i, 0])
         self.state = self.state[idx, :]
-
-        if not np.all(np.isfinite(self.state)):
-            logger.error(f"NaNs in simulator state after sorting!\n{self.state}")
-
         self.is_leaf = np.asarray(self.is_leaf, dtype=np.bool)[idx]
 
     def _compute_log_likelihood(self, action):
