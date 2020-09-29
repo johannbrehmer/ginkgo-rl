@@ -7,7 +7,7 @@ import os
 import numpy as np
 
 sys.path.append("../")
-from experiments.config import ex, config, env_config, agent_config, train_config, technical_config
+from experiments.config import ex, config, env_config, agent_config, train_config, technical_config, log_config
 from ginkgo_rl import GinkgoLikelihood1DEnv, GinkgoLikelihoodEnv
 from ginkgo_rl import (
     PolicyMCTSAgent,

@@ -24,12 +24,15 @@ def config():
         name = algorithm
     run_name = f"{name}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
 
-    # Set up observer
+
+# noinspection PyUnusedLocal
+@ex.config
+def log_config():
+    database = True
+
     ex.observers.append(FileStorageObserver(f"./data/runs/{run_name}"))
-    try:
+    if database:
         ex.observers.append(MongoObserver())
-    except Exception as e:
-        logger.warning(f"Did not find MongoDB, so only writing to file. Error message:\n\n{e}\n")
 
 
 # noinspection PyUnusedLocal
