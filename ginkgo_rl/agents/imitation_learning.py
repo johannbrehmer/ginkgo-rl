@@ -67,32 +67,46 @@ class ImitationLearningPolicyMCTSAgent(PolicyMCTSAgent):
             self.optimizer, gamma=self.lr_decay ** (1.0 / (total_timesteps + 1.0e-9))
         )
 
-        demonstration_actions = None
-        while demonstration_actions is None:
-            state = self.env.reset()
-            demonstration_actions = deque(self._find_demonstration_actions(teacher=teacher))
-
-        reward = 0.0
+        demonstration_actions = []
         rewards = []
-        episode = 0
+        episode = -1
         episode_loss = 0.0
         episode_reward = 0.0
         episode_length = 0
 
         for _ in trange(total_timesteps):
-            # Imitation learning
-            demonstration_action = demonstration_actions.popleft()
-            _, agent_info = self._predict_policy(state, demonstrator_action=demonstration_action)
-            loss = -agent_info["log_prob_demonstrator"]
-            self._gradient_step(loss)
+            # Set up episode
+            if not demonstration_actions:
+                episode += 1
+                episode_loss = 0.0
+                episode_reward = 0.0
+                episode_length = 0
+                self.episode_likelihood_evaluations = 0
 
-            # For debugging, make sure that demonstrator action is actually legal
+            while not demonstration_actions:
+                state = self.env.reset()
+                demonstration_actions = deque(self._find_demonstration_actions(teacher=teacher))
+
+            # Find demonstrator action
+            demonstration_action = demonstration_actions.popleft()
+
+            # Make sure that demonstrator action is actually legal
+            # Rarely, this is not the case. I think it's due to ambiguous energy sorting, but haven't really been able to pin this down
             legal_actions = self._find_legal_actions(state)
             if demonstration_action not in legal_actions:
                 logger.error("Demonstrator action is not legal?!")
                 logger.error(f"  State: {state}")
                 logger.error(f"  Legal actions: {legal_actions}")
                 logger.error(f"  Current demonstration action: {demonstration_action}")
+                logger.error(f"  Jet: {self.env.jet}")
+
+                demonstration_actions = []
+                continue
+
+            # Imitation learning
+            _, agent_info = self._predict_policy(state, demonstrator_action=demonstration_action)
+            loss = -agent_info["log_prob_demonstrator"]
+            self._gradient_step(loss)
 
             # Transition to next step
             next_state, next_reward, done, env_info = self.env.step(demonstration_action)
@@ -102,38 +116,26 @@ class ImitationLearningPolicyMCTSAgent(PolicyMCTSAgent):
             episode_length += 1
             rewards.append(next_reward)
             state = next_state
-            reward = next_reward
 
-            if done == bool(
-                demonstration_actions
-            ):  # Episode is done but still demo actions? Episode not done, but no demo actions any more? Something's afoot!
+            # Episode is done but still demo actions? Episode not done, but no demo actions any more? Something's afoot!
+            if done == bool(demonstration_actions):
                 logger.warning(f"Inconsistent episode termination in imitation learning from teacher {teacher}.")
                 logger.warning(f"  Done flag: {done}")
                 logger.warning(f"  Demonstration actions left: {demonstration_actions}")
+                demonstration_actions = []
+                done = True
 
-            if done or not demonstration_actions:
-                if callback is not None:
-                    callback(
-                        callback_info={
-                            "episode": episode,
-                            "episode_length": episode_length,
-                            "loss": episode_loss,
-                            "reward": episode_reward,
-                            "likelihood_evaluations": agent_info["likelihood_evaluations"],
-                            "mean_abs_weight": self.get_mean_weight(),
-                        }
-                    )
-
-                episode += 1
-                episode_loss = 0.0
-                episode_reward = 0.0
-                episode_length = 0
-                self.episode_likelihood_evaluations = 0
-
-                demonstration_actions = None
-                while demonstration_actions is None:
-                    state = self.env.reset()
-                    demonstration_actions = deque(self._find_demonstration_actions(teacher=teacher))
+            if done and callback is not None:
+                callback(
+                    callback_info={
+                        "episode": episode,
+                        "episode_length": episode_length,
+                        "loss": episode_loss,
+                        "reward": episode_reward,
+                        "likelihood_evaluations": agent_info["likelihood_evaluations"],
+                        "mean_abs_weight": self.get_mean_weight(),
+                    }
+                )
 
     def _find_demonstration_actions(self, teacher="mle"):
         """ From self.env.jet, find the sequence of true actions... or the MLE sequence of actions """

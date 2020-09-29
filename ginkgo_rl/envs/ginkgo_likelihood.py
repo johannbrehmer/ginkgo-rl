@@ -216,29 +216,40 @@ class GinkgoLikelihoodEnv(Env):
             maxNTry=self.max_n_try,
         )
 
-    def _simulate(self):
+    def _simulate(self, max_tries=10):
         """ Initiates an episode by simulating a new jet """
 
-        rate = (
-            torch.tensor([self.w_rate, self.qcd_rate]) if self.w_jet else torch.tensor([self.qcd_rate, self.qcd_rate])
-        )
-        jets = self.sim(rate)
-        if not jets:
-            raise RuntimeError(f"Could not generate any jets: {jets}")
+        rate = torch.tensor([self.w_rate, self.qcd_rate]) if self.w_jet else torch.tensor([self.qcd_rate, self.qcd_rate])
 
-        self.jet = self.sim(rate)[0]
-        self.n = len(self.jet["leaves"])
-        if not np.all(np.isfinite(self.jet["leaves"])):
-            logger.warning(f"NaNs in newly simulated tree leaves!\n{self.jet['leaves']}")
-            self.jet["leaves"][np.any(~np.isfinite(self.jet["leaves"]), axis=1)] = self.padding_value
-        self.state = self.padding_value * np.ones((self.n_max, 4))
-        self.state[: self.n] = self.state_rescaling * self.jet["leaves"]
-        self.is_leaf = [(i < self.n) for i in range(self.n_max)]
-        self.illegal_action_counter = 0
-        self._sort_state()
+        success = False
+        tries = 0
+        while not success:
+            tries += 1
+            if tries > max_tries:
+                raise RuntimeError(f"Failed to generate a consistent jet {max_tries} times")
+
+            jets = self.sim(rate)
+
+            if not jets:
+                logger.warning("Could not generate any jets, try {tries} / {max_tries}")
+                continue
+
+            self.jet = self.sim(rate)[0]
+            self.state = self.padding_value * np.ones((self.n_max, 4))
+            self.state[: self.n] = self.state_rescaling * self.jet["leaves"]
+            self.n = len(self.jet["leaves"])
+            self.is_leaf = [(i < self.n) for i in range(self.n_max)]
+            self.illegal_action_counter = 0
+            self._sort_state()
+            
+            if not np.all(np.isfinite(self.state)):
+                logger.warning(f"NaNs in newly simulated state, try {tries} / {max_tries}:\n{self.state}")
+                continue
+
+            success = True
 
         if self.verbose:
-            logger.debug(f"Sampling new jet with {self.n} leaves")
+            logger.debug(f"Sampled new jet with {self.n} leaves")
 
     def _check_acceptability(self, action):
         i, j = action
