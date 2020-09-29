@@ -231,9 +231,10 @@ class GinkgoEvaluator:
         reward = 0.0
         likelihood_evaluations = 0
 
-        # Point model to correct env: this only works for *our* models, not the baselines
+        # Point agent to correct env and initialize episode: this only works for *our* models, not the baselines
         try:
             model.set_env(self.env)
+            model.init_episode()
         except:
             pass
 

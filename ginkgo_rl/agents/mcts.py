@@ -47,7 +47,7 @@ class BaseMCTSAgent(Agent):
 
         self.episode_reward = 0.0
         self.episode_likelihood_evaluations = 0
-        self._init_episode()
+        self.init_episode()
 
     def set_env(self, env):
         """ Sets current environment (and initializes episode) """
@@ -55,7 +55,7 @@ class BaseMCTSAgent(Agent):
         self.env = env
         self.sim_env = copy.deepcopy(self.env)
         self.sim_env.reset_at_episode_end = False  # Avoids expensive re-sampling of jets every time we parse a path
-        self._init_episode()
+        self.init_episode()
 
     def set_precision(self, n_mc_target, n_mc_min, n_mc_max, planning_mode, c_puct, beam_size):
         """ Sets / changes MCTS precision parameters """
@@ -68,6 +68,13 @@ class BaseMCTSAgent(Agent):
         self.c_puct = c_puct
         self.beam_size = beam_size
 
+    def init_episode(self):
+        """ Initializes MCTS tree and total reward so far """
+
+        self.mcts_head = MCTSNode(None, [], reward_min=self.reward_range[0], reward_max=self.reward_range[1])
+        self.episode_reward = 0.0
+        self.episode_likelihood_evaluations = 0
+
     def update(self, state, reward, action, done, next_state, next_reward, num_episode, **kwargs):
         """ Updates after environment reaction """
 
@@ -78,12 +85,8 @@ class BaseMCTSAgent(Agent):
                 f"Agent acknowledges receiving a reward of {next_reward}, episode reward so far {self.episode_reward}"
             )
 
-        # MCTS updates
-        if done:
-            # Reset MCTS when done with an episode
-            self._init_episode()
-        else:
-            # Update MCTS tree when deciding on an action
+        # Update MCTS tree
+        if not done:
             self.mcts_head = self.mcts_head.children[action]
             self.mcts_head.prune()  # This updates the node.path
 
@@ -156,13 +159,6 @@ class BaseMCTSAgent(Agent):
 
         self.episode_likelihood_evaluations += 1
         return log_likelihood
-
-    def _init_episode(self):
-        """ Initializes MCTS tree and total reward so far """
-
-        self.mcts_head = MCTSNode(None, [], reward_min=self.reward_range[0], reward_max=self.reward_range[1])
-        self.episode_reward = 0.0
-        self.episode_likelihood_evaluations = 0
 
     def _mcts(self, state, max_steps=1000):
         """ Run Monte-Carl tree search from state for n trajectories"""

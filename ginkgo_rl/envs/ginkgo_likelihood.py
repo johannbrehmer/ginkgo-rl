@@ -235,13 +235,13 @@ class GinkgoLikelihoodEnv(Env):
                 continue
 
             self.jet = self.sim(rate)[0]
+            self.n = len(self.jet["leaves"])
             self.state = self.padding_value * np.ones((self.n_max, 4))
             self.state[: self.n] = self.state_rescaling * self.jet["leaves"]
-            self.n = len(self.jet["leaves"])
             self.is_leaf = [(i < self.n) for i in range(self.n_max)]
             self.illegal_action_counter = 0
             self._sort_state()
-            
+
             if not np.all(np.isfinite(self.state)):
                 logger.warning(f"NaNs in newly simulated state, try {tries} / {max_tries}:\n{self.state}")
                 continue

@@ -59,19 +59,31 @@ class Agent(nn.Module):
             self.optimizer = None  # For non-NN methods
             self.scheduler = None
 
+        # Prepare episodes
         state = self.env.reset()
         reward = 0.0
         rewards = []
-        episode = 0
-
+        episode = -1
+        done = True
         episode_loss = 0.0
         episode_reward = 0.0
         episode_length = 0
 
         for steps in trange(total_timesteps):
+            # Initialize episode
+            if done:
+                episode += 1
+                episode_loss = 0.0
+                episode_reward = 0.0
+                episode_length = 0
+                state = self.env.reset()
+                self.init_episode()
+
+            # Agent and environment step
             action, agent_info = self.predict(state)
             next_state, next_reward, done, env_info = self.env.step(action)
 
+            # Learning
             loss = self.update(
                 state=self._tensorize(state),
                 reward=reward,
@@ -83,6 +95,7 @@ class Agent(nn.Module):
                 **agent_info,
             )
 
+            # Book keeping
             episode_loss += loss
             episode_reward += next_reward
             episode_length += 1
@@ -90,24 +103,17 @@ class Agent(nn.Module):
             state = next_state
             reward = next_reward
 
-            if done:
-                if callback is not None:
-                    callback(
-                        callback_info={
-                            "episode": episode,
-                            "episode_length": episode_length,
-                            "loss": episode_loss,
-                            "reward": episode_reward,
-                            "likelihood_evaluations": agent_info["likelihood_evaluations"],
-                            "mean_abs_weight": self.get_mean_weight(),
-                        }
-                    )
-
-                episode += 1
-                episode_loss = 0.0
-                episode_reward = 0.0
-                episode_length = 0
-                state = self.env.reset()
+            if done and callback is not None:
+                callback(
+                    callback_info={
+                        "episode": episode,
+                        "episode_length": episode_length,
+                        "loss": episode_loss,
+                        "reward": episode_reward,
+                        "likelihood_evaluations": agent_info["likelihood_evaluations"],
+                        "mean_abs_weight": self.get_mean_weight(),
+                    }
+                )
 
     def predict(self, state):
         """
@@ -130,6 +136,11 @@ class Agent(nn.Module):
 
         state = self._tensorize(state)
         return self._predict(state)
+
+
+    def init_episode(self):
+        """ Is called at the beginning of an episode """
+        pass
 
     def update(self, state, reward, action, done, next_state, next_reward, num_episode, **kwargs):
         """
