@@ -4,7 +4,7 @@
 
 - Environment with all package dependencies can be installed with `conda env create -f environment.yml`
 - Ideally, also get a MongoDB to run and use OmniBoard to monitor experiments (though this is optional)
-- For the Ginkgo simulator, install [ToyJetsShower](https://github.com/johannbrehmer/ToyJetsShower) (`pip install -e .` works)
+- For the Ginkgo simulator, install [ToyJetsShower](https://github.com/johannbrehmer/ToyJetsShower) (`pip install -e .` works, it's missing the `pyro-ppl` dependency though)
 - For beam search and MLE estimates through the trellis, clone [ReclusterTreeAlgorithms](https://github.com/SebastianMacaluso/ReclusterTreeAlgorithms) and [hierarchical-trellis](https://github.com/iesl/hierarchical-trellis), and adapt the paths hard-coded in [evaluator.py](ginkgo_rl/eval/evaluator.py)
 
 

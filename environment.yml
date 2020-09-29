@@ -26,6 +26,7 @@ dependencies:
     - gym==0.17.2
     - imageio
     - pandas
+    - pyro-ppl
     - pymongo==3.11.0
     - sacred==0.8.1
     - scipy

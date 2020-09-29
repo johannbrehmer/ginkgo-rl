@@ -17,6 +17,7 @@ from run_physics_experiment_invM import compare_map_gt_and_bs_trees as compute_t
 
 sys.path.insert(0, "/Users/johannbrehmer/work/projects/shower_rl/ReclusterTreeAlgorithms/scripts")
 sys.path.insert(0, "/scratch/jb6504/ReclusterTreeAlgorithms/scripts")
+sys.path.insert(0, "/scratch/jb6504/ReclusterTreeAlgorithms")
 import beamSearchOptimal_invM as beam_search
 
 logger = logging.getLogger(__name__)
