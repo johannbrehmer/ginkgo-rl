@@ -12,9 +12,11 @@ from ginkgo_rl import GinkgoLikelihoodEnv, GinkgoLikelihood1DEnv
 
 # Workaround for now until Trellis is better packaged
 sys.path.append("/Users/johannbrehmer/work/projects/shower_rl/hierarchical-trellis/src")
+sys.path.append("/scratch/jb6504/hierarchical-trellis/src")
 from run_physics_experiment_invM import compare_map_gt_and_bs_trees as compute_trellis
 
 sys.path.insert(0, "/Users/johannbrehmer/work/projects/shower_rl/ReclusterTreeAlgorithms/scripts")
+sys.path.insert(0, "/scratch/jb6504/ReclusterTreeAlgorithms/scripts")
 import beamSearchOptimal_invM as beam_search
 
 logger = logging.getLogger(__name__)
