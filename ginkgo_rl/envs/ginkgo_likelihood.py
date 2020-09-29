@@ -218,7 +218,9 @@ class GinkgoLikelihoodEnv(Env):
     def _simulate(self, max_tries=10):
         """ Initiates an episode by simulating a new jet """
 
-        rate = torch.tensor([self.w_rate, self.qcd_rate]) if self.w_jet else torch.tensor([self.qcd_rate, self.qcd_rate])
+        rate = (
+            torch.tensor([self.w_rate, self.qcd_rate]) if self.w_jet else torch.tensor([self.qcd_rate, self.qcd_rate])
+        )
 
         success = False
         tries = 0

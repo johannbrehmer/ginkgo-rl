@@ -137,7 +137,6 @@ class Agent(nn.Module):
         state = self._tensorize(state)
         return self._predict(state)
 
-
     def init_episode(self):
         """ Is called at the beginning of an episode """
         pass
