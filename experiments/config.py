@@ -2,9 +2,12 @@ import torch
 import datetime
 from sacred import Experiment
 from sacred.observers import FileStorageObserver, MongoObserver
+import logging
 
 ex = Experiment(name="rl-ginkgo")
 __all__ = ["ex", "config", "env_config", "agent_config", "train_config", "eval_config", "technical_config"]
+
+logger = logging.getLogger(__name__)
 
 
 # noinspection PyUnusedLocal
@@ -23,7 +26,10 @@ def config():
 
     # Set up observer
     ex.observers.append(FileStorageObserver(f"./data/runs/{run_name}"))
-    ex.observers.append(MongoObserver())
+    try:
+        ex.observers.append(MongoObserver())
+    except Exception as e:
+        logger.warning(f"Did not find MongoDB, so only writing to file. Error message:\n\n{e}\n")
 
 
 # noinspection PyUnusedLocal

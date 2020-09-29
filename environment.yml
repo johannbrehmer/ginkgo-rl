@@ -6,8 +6,6 @@ channels:
   - defaults
 dependencies:
   - jupyterlab
-  - libcxx=10.0.0
-  - libgfortran=3.0.1
   - line_profiler
   - matplotlib>3.2
   - nb_conda_kernels
@@ -29,8 +27,6 @@ dependencies:
     - imageio
     - pandas
     - pymongo==3.11.0
-    - pyro-api==0.1.2
-    - pyro-ppl==1.4.0
     - sacred==0.8.1
     - scipy
     - stable-baselines==2.10.0
