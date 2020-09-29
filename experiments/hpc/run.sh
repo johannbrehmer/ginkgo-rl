@@ -13,6 +13,7 @@ seed=$((SLURM_ARRAY_TASK_ID + 1000))
 setup=$((SLURM_ARRAY_TASK_ID % 12))
 
 cd $dir
+source activate rl
 
 case ${setup} in
 0) python -u experiment.py with mcts_xs "seed=$seed";;
