@@ -290,6 +290,22 @@ def lfd_s():
 
 
 @ex.named_config
+def lfd_mcts_xs():
+    algorithm = "lfd-mcts"
+    name = "lfd-mcts_xs"
+
+    train_beamsize = 3
+    train_n_mc_target = 1
+    train_n_mc_max = 10
+
+    eval_beamsize = 3
+    eval_n_mc_target = 1
+    eval_n_mc_max = 10
+
+    clip_gradient = 1.0
+
+
+@ex.named_config
 def lfd_mcts_s():
     algorithm = "lfd-mcts"
     name = "lfd-mcts_s"
@@ -301,6 +317,38 @@ def lfd_mcts_s():
     eval_beamsize = 5
     eval_n_mc_target = 1
     eval_n_mc_max = 20
+
+    clip_gradient = 1.0
+
+
+@ex.named_config
+def lfd_mcts_m():
+    algorithm = "lfd-mcts"
+    name = "lfd-mcts_m"
+
+    train_beamsize = 20
+    train_n_mc_target = 2
+    train_n_mc_max = 50
+
+    eval_beamsize = 20
+    eval_n_mc_target = 2
+    eval_n_mc_max = 50
+
+    clip_gradient = 1.0
+
+
+@ex.named_config
+def lfd_mcts_l():
+    algorithm = "lfd-mcts"
+    name = "lfd-mcts_l"
+
+    train_beamsize = 100
+    train_n_mc_target = 5
+    train_n_mc_max = 200
+
+    eval_beamsize = 100
+    eval_n_mc_target = 5
+    eval_n_mc_max = 200
 
     clip_gradient = 1.0
 

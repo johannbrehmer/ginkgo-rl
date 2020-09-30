@@ -29,5 +29,8 @@ case ${setup} in
 10) python -u experiment.py with mcts_no_beamsearch "seed=$seed" "database=False";;
 11) python -u experiment.py with mcts_random "seed=$seed" "database=False";;
 12) python -u experiment.py with random "seed=$seed" "database=False";;
+13) python -u experiment.py with lfd_mcts_xs "seed=$seed" "database=False";;
+14) python -u experiment.py with lfd_mcts_m "seed=$seed" "database=False";;
+15) python -u experiment.py with lfd_mcts_l "seed=$seed" "database=False";;
 *) echo "Nothing to do for job ${SLURM_ARRAY_TASK_ID}" ;;
 esac
