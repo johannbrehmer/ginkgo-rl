@@ -11,7 +11,7 @@ class RandomAgent(Agent):
     def _predict(self, state):
         actions = self._find_legal_actions(state)
         action = random.choice(actions)
-        return action, {"likelihood_evaluations":0}
+        return action, {"likelihood_evaluations": 0}
 
     def update(self, state, reward, action, done, next_state, next_reward, num_episode, **kwargs):
         pass

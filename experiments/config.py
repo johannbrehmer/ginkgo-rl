@@ -59,7 +59,7 @@ def env_config():
 def agent_config():
     initialize_mcts_with_beamsearch = True
     log_likelihood_policy_input = True
-    decision_mode = "max_puct"  # {"max_reward", "max_puct", "mean_puct"}
+    decision_mode = "max_reward"  # {"max_reward", "max_puct", "mean_puct"}
 
     reward_range = (-500.0, 0.0)
     history_length = None
