@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 #SBATCH --job-name=ginkgo-rl
-#SBATCH --output=log_ginkgo_rl_%a.log
+#SBATCH --output=log_ginkgo_rl_run1_%a.log
 #SBATCH --nodes=1
 #SBATCH --cpus-per-task=1
 #SBATCH --mem=16GB
