@@ -20,7 +20,7 @@ case ${setup} in
 1) python -u experiment.py with mcts_s "seed=$seed" "database=False";;
 2) python -u experiment.py with mcts_m "seed=$seed" "database=False";;
 3) python -u experiment.py with mcts_l "seed=$seed" "database=False";;
-4) python -u experiment.py with lfd_s "seed=$seed" "database=False";;
+4) python -u experiment.py with lfd "seed=$seed" "database=False";;
 5) python -u experiment.py with lfd_mcts_s "seed=$seed" "database=False";;
 6) python -u experiment.py with mcts_exploit "seed=$seed" "database=False";;
 7) python -u experiment.py with mcts_explore "seed=$seed" "database=False";;
@@ -32,5 +32,10 @@ case ${setup} in
 13) python -u experiment.py with lfd_mcts_xs "seed=$seed" "database=False";;
 14) python -u experiment.py with lfd_mcts_m "seed=$seed" "database=False";;
 15) python -u experiment.py with lfd_mcts_l "seed=$seed" "database=False";;
+16) python -u experiment.py with lfd_mleteacher "seed=$seed" "database=False";;
+17) python -u experiment.py with lfd_mcts_mleteacher_xs "seed=$seed" "database=False";;
+18) python -u experiment.py with lfd_mcts_mleteacher_s "seed=$seed" "database=False";;
+19) python -u experiment.py with lfd_mcts_mleteacher_m "seed=$seed" "database=False";;
+20) python -u experiment.py with lfd_mcts_mleteacher_l "seed=$seed" "database=False";;
 *) echo "Nothing to do for job ${SLURM_ARRAY_TASK_ID}" ;;
 esac

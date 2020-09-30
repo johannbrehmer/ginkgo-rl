@@ -147,7 +147,7 @@ class ImitationLearningPolicyMCTSAgent(PolicyMCTSAgent):
         elif teacher == "mle":
             jet = self._get_maximum_likelihood_tree()
             if jet is None:
-                return None
+                jet = self.env.jet  # We use MLE only for small jets, and otherwise stick to the truth jet
         else:
             raise ValueError(teacher)
 
@@ -224,7 +224,7 @@ class ImitationLearningPolicyMCTSAgent(PolicyMCTSAgent):
 
         return actions
 
-    def _get_maximum_likelihood_tree(self, max_leaves=11):
+    def _get_maximum_likelihood_tree(self, max_leaves=10):
         """ Based on Sebastian's code at https://github.com/iesl/hierarchical-trellis/blob/sebastian/src/Jet_Experiments_invM_exactTrellis.ipynb """
 
         if len(self.env.jet["leaves"]) > max_leaves:

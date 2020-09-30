@@ -89,7 +89,7 @@ def train_config():
     train_planning_mode = "mean"  # {"max", "mean"}, refers to PUCT
     train_c_puct = 1.0
 
-    imitation_steps = 500000
+    imitation_steps = 1000000
 
     learning_rate = 1.0e-3
     lr_decay = 0.01
@@ -282,11 +282,9 @@ def mcts_l():
 
 
 @ex.named_config
-def lfd_s():
+def lfd():
     algorithm = "lfd"
-    name = "lfd_s"
-
-    clip_gradient = 1.0
+    name = "lfd"
 
 
 @ex.named_config
@@ -302,8 +300,6 @@ def lfd_mcts_xs():
     eval_n_mc_target = 1
     eval_n_mc_max = 10
 
-    clip_gradient = 1.0
-
 
 @ex.named_config
 def lfd_mcts_s():
@@ -317,8 +313,6 @@ def lfd_mcts_s():
     eval_beamsize = 5
     eval_n_mc_target = 1
     eval_n_mc_max = 20
-
-    clip_gradient = 1.0
 
 
 @ex.named_config
@@ -334,8 +328,6 @@ def lfd_mcts_m():
     eval_n_mc_target = 2
     eval_n_mc_max = 50
 
-    clip_gradient = 1.0
-
 
 @ex.named_config
 def lfd_mcts_l():
@@ -350,7 +342,72 @@ def lfd_mcts_l():
     eval_n_mc_target = 5
     eval_n_mc_max = 200
 
-    clip_gradient = 1.0
+
+@ex.named_config
+def lfd_mleteacher():
+    algorithm = "lfd"
+    teacher = "mle"
+    name = "lfd_mleteacher"
+
+
+@ex.named_config
+def lfd_mcts_mleteacher_xs():
+    algorithm = "lfd-mcts"
+    teacher = "mle"
+    name = "lfd-mcts_mleteacher_xs"
+
+    train_beamsize = 3
+    train_n_mc_target = 1
+    train_n_mc_max = 10
+
+    eval_beamsize = 3
+    eval_n_mc_target = 1
+    eval_n_mc_max = 10
+
+
+@ex.named_config
+def lfd_mcts_mleteacher_s():
+    algorithm = "lfd-mcts"
+    teacher = "mle"
+    name = "lfd-mcts_mleteacher_s"
+
+    train_beamsize = 5
+    train_n_mc_target = 1
+    train_n_mc_max = 20
+
+    eval_beamsize = 5
+    eval_n_mc_target = 1
+    eval_n_mc_max = 20
+
+
+@ex.named_config
+def lfd_mcts_mleteacher_m():
+    algorithm = "lfd-mcts"
+    teacher = "mle"
+    name = "lfd-mcts_mleteacher_m"
+
+    train_beamsize = 20
+    train_n_mc_target = 2
+    train_n_mc_max = 50
+
+    eval_beamsize = 20
+    eval_n_mc_target = 2
+    eval_n_mc_max = 50
+
+
+@ex.named_config
+def lfd_mcts_mleteacher_l():
+    algorithm = "lfd-mcts"
+    teacher = "mle"
+    name = "lfd-mcts_mleteacher_l"
+
+    train_beamsize = 100
+    train_n_mc_target = 5
+    train_n_mc_max = 200
+
+    eval_beamsize = 100
+    eval_n_mc_target = 5
+    eval_n_mc_max = 200
 
 
 @ex.named_config
