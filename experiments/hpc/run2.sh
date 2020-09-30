@@ -28,5 +28,6 @@ case ${setup} in
 9) python -u experiment.py with mcts_puct_decisions "seed=$seed" "database=False";;
 10) python -u experiment.py with mcts_no_beamsearch "seed=$seed" "database=False";;
 11) python -u experiment.py with mcts_random "seed=$seed" "database=False";;
+12) python -u experiment.py with random "seed=$seed" "database=False";;
 *) echo "Nothing to do for job ${SLURM_ARRAY_TASK_ID}" ;;
 esac
