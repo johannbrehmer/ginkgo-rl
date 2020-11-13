@@ -11,7 +11,7 @@ Particle physics experiments often require the reconstruction of  decay patterns
 
 Please see [our paper](https://arxiv.org/abs/2011.XXXXX) for more details.
 
-## Getting started
+### Getting started
 
 - A conda environment with all package dependencies can be installed with `conda env create -f environment.yml`
 - Ideally, also get a MongoDB to run and use OmniBoard to monitor experiments (though this is optional)
@@ -19,7 +19,7 @@ Please see [our paper](https://arxiv.org/abs/2011.XXXXX) for more details.
 - For beam search and MLE estimates through the trellis, clone [ReclusterTreeAlgorithms](https://github.com/SebastianMacaluso/ReclusterTreeAlgorithms) and [hierarchical-trellis](https://github.com/iesl/hierarchical-trellis), and adapt the paths hard-coded in [evaluator.py](ginkgo_rl/eval/evaluator.py)
 
 
-## Running experiments
+### Running experiments
 
 To run individual experiments:
 ```
