@@ -4,7 +4,7 @@
 [Duccio Pappadopulo](dpappadopulo@bloomberg.net), and [Kyle Cranmer](kyle.cranmer@nyu.edu)
 
 [![arXiv](http://img.shields.io/badge/arXiv-2020.XXXXX-B31B1B.svg)](https://arxiv.org/abs/2011.XXXXX)
-[![arXiv](http://img.shields.io/badge/ML4PS-2020-000000.svg)](https://ml4physicalsciences.github.io/2020/)
+[![ML4PS](http://img.shields.io/badge/ML4PS-2020-000000.svg)](https://ml4physicalsciences.github.io/2020/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 Particle physics experiments often require the reconstruction of  decay patterns through a hierarchical clustering of the observed final-state particles. We show that this task can be phrased as a Markov Decision Process and adapt reinforcement learning algorithms to solve it. In particular, we show that Monte-Carlo Tree Search guided by a neural policy can construct high-quality hierarchical clusterings and outperform established greedy and beam search baselines.
