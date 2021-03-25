@@ -2,8 +2,8 @@ import numpy as np
 from gym import Env
 from gym.spaces import Discrete, Box, MultiDiscrete
 import logging
-from showerSim.invMass_ginkgo import Simulator as GinkgoSim
-from showerSim.likelihood_invM import split_logLH as ginkgo_log_likelihood
+from ginkgo.invMass_ginkgo import Simulator as GinkgoSim
+from ginkgo.likelihood_invM import split_logLH as ginkgo_log_likelihood
 import torch
 import copy
 

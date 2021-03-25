@@ -1,33 +1,33 @@
 name: rl
-channels:
-  - pytorch
-  - conda-forge
-  - https://conda.anaconda.org/NLeSC
-  - defaults
+#channels:
+#  - pytorch
+#  - conda-forge
+#  - https://conda.anaconda.org/NLeSC
+#  - defaults
 dependencies:
-  - jupyterlab
-  - line_profiler
-  - matplotlib>3.2
-  - nb_conda_kernels
-  - numpy>1.18
-  - pillow
-  - pip
-  - python=3.7.7
-  - pytorch=1.6.0
-  - requests
-  - scikit-learn
-  - sqlite
-  - torchvision=0.7.0
+#  - jupyterlab
+#  - line_profiler
+#  - matplotlib>3.2
+#  - nb_conda_kernels
+#  - numpy>1.18
+#  - pillow
+#  - pip
+#  - python=3.7.7
+#  - pytorch=1.6.0
+#  - requests
+#  - scikit-learn
+#  - sqlite
+#  - torchvision=0.7.0
   - tqdm
   - werkzeug
   - pip:
-    - atari-py
-    - black
+#    - atari-py
+#    - black
     - gym==0.17.2
     - imageio
-    - pandas
-    - pyro-ppl
+#    - pandas
+#    - pyro-ppl
     - pymongo==3.11.0
     - sacred==0.8.1
-    - scipy
-    - stable-baselines==2.10.0
+#    - scipy
+#    - stable-baselines==2.10.0

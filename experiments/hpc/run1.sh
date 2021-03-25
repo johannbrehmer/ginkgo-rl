@@ -1,14 +1,20 @@
-#!/usr/bin/env bash
-
-#SBATCH --job-name=ginkgo-rl
-#SBATCH --output=log_ginkgo_rl_run1_%a.log
+#!/bin/bash
 #SBATCH --nodes=1
+#SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=1
+#SBATCH --time=30:00
 #SBATCH --mem=16GB
-#SBATCH --time=5-00:00:00
-# #SBATCH --gres=gpu:1
+#SBATCH --job-name=ginkgo-rl
+#SBATCH --mail-type=END
+#SBATCH --mail-user=sm4511@nyu.edu
+#SBATCH --output=logs/log_ginkgo_rl_run1_%a.log
+#SBATCH --gres=gpu:1
 
-dir=/scratch/jb6504/ginkgo-rl/experiments
+
+##SBATCH --time=5-00:00:00
+
+
+dir=/scratch/sm4511/ginkgo-rl/experiments
 seed=$((SLURM_ARRAY_TASK_ID + 1000))
 setup=$((SLURM_ARRAY_TASK_ID))
 

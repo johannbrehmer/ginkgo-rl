@@ -5,6 +5,7 @@ import sys
 import torch
 import os
 import numpy as np
+import time
 
 sys.path.append("../")
 from experiments.config import ex, config, env_config, agent_config, train_config, technical_config
@@ -50,7 +51,7 @@ def setup_run(name, run_name, seed):
 def setup_logging(debug):
     """ Sets up logging  """
 
-    silence_list = ["matplotlib", "showerSim", "hierarchical-trellis"]
+    silence_list = ["matplotlib", "ginkgo", "ClusterTrellis"]
 
     for key in logging.Logger.manager.loggerDict:
         logging.getLogger(key).setLevel(logging.DEBUG if debug else logging.INFO)
@@ -420,7 +421,7 @@ def save_agent(agent, algorithm, policy, run_name):
 @ex.automain
 def main():
     """ Main entry point for experiments """
-
+    startTime = time.time()
     logger.info(f"Hi!")
 
     check_config()
@@ -432,7 +433,10 @@ def main():
     train(env, agent)
     save_agent(agent)
 
-    result = eval(agent, env)
+    # result = eval(agent, env)
+
+    endTime = time.time() -startTime
+    logger.info(f"Total time = {endTime}")
 
     logger.info(f"That's all, have a nice day!")
-    return result
+    # return result

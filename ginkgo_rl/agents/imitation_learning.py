@@ -10,8 +10,8 @@ import logging
 from .mcts import PolicyMCTSAgent
 
 # Workaround for now until Trellis is better packaged
-sys.path.append("/Users/johannbrehmer/work/projects/shower_rl/hierarchical-trellis/src")
-from run_physics_experiment_invM import compare_map_gt_and_bs_trees as compute_trellis
+# sys.path.append("/Users/johannbrehmer/work/projects/shower_rl/hierarchical-trellis/src")
+from ClusterTrellis.run_experiments import compare_map_gt_and_bs_trees as compute_trellis
 
 logger = logging.getLogger(__name__)
 

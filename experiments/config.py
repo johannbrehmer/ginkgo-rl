@@ -35,18 +35,19 @@ def env_config():
     illegal_reward = -100.0
     illegal_actions_patience = 3
 
-    n_max = 20
-    n_min = 2
+    n_max = 40
+    n_min = 4
     n_target = 1
 
     min_reward = -100.0
     state_rescaling = 0.01
     padding_value = -1.0
 
-    w_jet = True
+    w_jet = False
     w_rate = 3.0
     qcd_rate = 1.5
-    pt_min = 4.0 ** 2
+    # pt_min = 4.0 ** 2
+    pt_min = 1.1 ** 2
     qcd_mass = 30.0
     w_mass = 80.0
     jet_momentum = 400.0
@@ -73,7 +74,8 @@ def agent_config():
 # noinspection PyUnusedLocal
 @ex.config
 def train_config():
-    pretrain_steps = 50000
+    # pretrain_steps = 50000
+    pretrain_steps = 1000
     pretrain_n_mc_target = 1
     pretrain_n_mc_min = 0
     pretrain_n_mc_max = 10
@@ -81,7 +83,8 @@ def train_config():
     pretrain_planning_mode = "mean"  # {"max", "mean"}, refers to PUCT
     pretrain_c_puct = 1.0
 
-    train_steps = 10000
+    # train_steps = 10000
+    train_steps = 1000
     train_n_mc_target = 1
     train_n_mc_min = 0
     train_n_mc_max = 20
@@ -89,7 +92,8 @@ def train_config():
     train_planning_mode = "mean"  # {"max", "mean"}, refers to PUCT
     train_c_puct = 1.0
 
-    imitation_steps = 1000000
+    # imitation_steps = 1000000
+    imitation_steps = 1
 
     learning_rate = 1.0e-3
     lr_decay = 0.01
@@ -110,7 +114,8 @@ def eval_config():
 
     eval_jets = 500
     eval_repeats = 1
-    eval_filename = "./data/eval/eval2.pickle"
+    # eval_filename = "./data/eval/eval2.pickle"
+    eval_filename =  "./data/eval/debug.pickle"
     redraw_eval_jets = False
 
 
