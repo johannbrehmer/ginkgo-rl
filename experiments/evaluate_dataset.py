@@ -3,7 +3,7 @@ import numpy as np
 import logging
 import torch
 
-sys.path.append("../")
+# sys.path.append("../")
 from ginkgo_rl import GinkgoRLInterface, PolicyMCTSAgent
 
 logger = logging.getLogger("We")
@@ -36,11 +36,12 @@ settings = {
 }
 
 
-state_dict_filename = "./data/runs/mcts_nn_xs_20210324_154917_1003/model.pty"
+state_dict_filename = "/Users/sebastianmacaluso/Dropbox/Documents/Physics_projects/simulator/ginkgo-rl/experiments/data/runs/mcts_nn_xs_20210324_154917_1003/model.pty"
 
 grl = GinkgoRLInterface(state_dict_filename, **settings)
 
 jets = grl.generate(n=1)
+print("Jets = ", jets)
 
 clustered_jets, log_likelihoods, illegal_actions, costs = grl.cluster(jets, filename="reclustered_jets.pickle")
 
